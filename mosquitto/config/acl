@@ -1,20 +1,20 @@
-# Droits par compte MQTT (remplacer g0X par votre numéro de groupe partout)
+# Droits par compte MQTT (remplacer g02 par votre numéro de groupe partout)
 
 # Boîtier ESP32 : envoie mesures/alertes/état, reçoit les commandes
 user esp32
-topic write sentinelx/g0X/telemetry
-topic write sentinelx/g0X/alerts
-topic write sentinelx/g0X/status
-topic read  sentinelx/g0X/cmd
+topic write sentinelx/g02/telemetry
+topic write sentinelx/g02/alerts
+topic write sentinelx/g02/status
+topic read  sentinelx/g02/cmd
 
 # Script IA (webcam) : envoie seulement des alertes
 user ia
-topic write sentinelx/g0X/alerts
+topic write sentinelx/g02/alerts
 
 # API : lit tout le projet, envoie les commandes
 user api
-topic read  sentinelx/g0X/#
-topic write sentinelx/g0X/cmd
+topic read  sentinelx/g02/#
+topic write sentinelx/g02/cmd
 
 # Admin (tests, MQTT Explorer) : accès complet
 user admin
