@@ -1,4 +1,4 @@
-# Droits par compte MQTT (remplacer g02 par votre numéro de groupe partout)
+# Droits par compte MQTT — groupe g02 (changer g02 partout si besoin)
 
 # Boîtier ESP32 : envoie mesures/alertes/état, reçoit les commandes
 user esp32
@@ -13,6 +13,11 @@ topic write sentinelx/g02/alerts
 
 # API : lit tout le projet, envoie les commandes
 user api
+topic read  sentinelx/g02/#
+topic write sentinelx/g02/cmd
+
+# Dashboard web : lit tout le projet, envoie les commandes
+user dashboard
 topic read  sentinelx/g02/#
 topic write sentinelx/g02/cmd
 
