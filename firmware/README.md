@@ -28,17 +28,17 @@ Firmware for the Sentinel-X IoT monitoring system using ESP32, sensors, and MQTT
 
 ### PIR HC-SR501
 - VCC → 5V (VIN)
-- OUT → GPIO 23 (configurable in `config.h`)
+- OUT → GPIO 27 (configurable in `config.h`)
 - GND → GND
 
 ### Active Buzzer
-- S → GPIO 22 (configurable in `config.h`)
+- S → GPIO 26 (configurable in `config.h`)
 - VCC → 5V
 - GND → GND
 
 ### LEDs
-- Red LED anode → GPIO 19 with 220Ω resistor → GND
-- Yellow LED anode → GPIO 18 with 220Ω resistor → GND
+- Red LED anode → GPIO 25 with 220Ω resistor → GND
+- Yellow LED anode → GPIO 33 with 220Ω resistor → GND
 
 ## Installation
 
@@ -52,11 +52,11 @@ Firmware for the Sentinel-X IoT monitoring system using ESP32, sensors, and MQTT
 Edit `include/config.h`:
 
 ```cpp
-#define WIFI_SSID "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#define WIFI_SSID "your_wifi"
+#define WIFI_PASSWORD "your_wifi_password"
 
-#define MQTT_HOST "mosquitto"
-#define GROUP_ID "g0X"
+#define MQTT_HOST "192.168.1.50"
+#define GROUP_ID "g01"
 ```
 
 ### Environment Selection

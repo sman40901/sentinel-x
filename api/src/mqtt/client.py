@@ -30,20 +30,20 @@ ENVIRONMENT = os.getenv(
 
 MQTT_HOST = os.getenv(
     "MQTT_HOST",
-    "mosquitto",
+    "192.168.1.50",
 )
 
 # Set defaults based on environment
 if ENVIRONMENT == "prod":
     MQTT_USE_TLS_DEFAULT = "true"
     MQTT_PORT_DEFAULT = "8883"
-    MQTT_USERNAME_DEFAULT = "api"
+    MQTT_USERNAME_DEFAULT = "esp32"
     MQTT_PASSWORD_DEFAULT = "your_mqtt_password"
 else:
     MQTT_USE_TLS_DEFAULT = "false"
     MQTT_PORT_DEFAULT = "1883"
-    MQTT_USERNAME_DEFAULT = ""
-    MQTT_PASSWORD_DEFAULT = ""
+    MQTT_USERNAME_DEFAULT = "esp32"
+    MQTT_PASSWORD_DEFAULT = "your_mqtt_password"
 
 MQTT_USE_TLS = os.getenv(
     "MQTT_USE_TLS",
@@ -74,7 +74,7 @@ MQTT_CA_CERT = os.getenv(
 
 GROUP_ID = os.getenv(
     "GROUP_ID",
-    "g0X",
+    "g01",
 )
 
 

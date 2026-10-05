@@ -25,11 +25,11 @@ class TestConfiguration:
 
     def test_mqtt_host_default(self):
         """Test default MQTT host."""
-        assert MQTT_HOST == "mosquitto"
+        assert MQTT_HOST == "192.168.1.50"
 
     def test_group_id_default(self):
         """Test default GROUP_ID."""
-        assert GROUP_ID == "g0X"
+        assert GROUP_ID == "g01"
 
     def test_topic_format(self):
         """Test MQTT topic format."""
