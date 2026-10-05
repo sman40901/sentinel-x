@@ -1,41 +1,42 @@
-# API Setup Guide
+# Guide d'installation de l'API
 
-## Prerequisites
+## Prérequis
 
-- Python 3.8 or higher
-- pip (Python package manager)
+- Python 3.8 ou supérieur
+- pip (gestionnaire de paquets Python)
 
 ## Installation
 
-### 1. Install Dependencies
+### 1. Installer les dépendances
 
 ```bash
 cd api
 pip install -r requirement.txt
 ```
 
-This will install:
-- paho-mqtt (MQTT client)
-- fastapi (Web framework)
-- uvicorn (ASGI server)
-- pytest (Testing framework)
-- pytest-asyncio (Async test support)
+Cette commande installera :
+- paho-mqtt (client MQTT)
+- fastapi (framework Web)
+- uvicorn (serveur ASGI)
+- pytest (framework de tests)
+- pytest-asyncio (support des tests asynchrones)
 
-### 2. Set Environment Variables
+### 2. Définir les variables d'environnement
 
-Create a `.env` file in the `api` directory:
+Créez un fichier `.env` dans le répertoire `api` :
 
 ```bash
-# Copy the example
+# Copier le fichier d'exemple
 cp .env.example .env
 
-# Edit .env with your settings
+# Modifier le fichier .env avec vos paramètres
 notepad .env  # Windows
-# or
+# ou
 nano .env     # Linux/Mac
 ```
 
-For testing (no auth, no TLS):
+Pour les tests (sans authentification et sans TLS) :
+
 ```bash
 ENVIRONMENT=test
 MQTT_HOST=mosquitto
@@ -47,19 +48,22 @@ MQTT_CA_CERT=/certs/ca.crt
 GROUP_ID=g0X
 ```
 
-### 3. Run the API
+### 3. Démarrer l'API
 
 ```bash
 python -m uvicorn src.main:app --reload
 ```
 
-The API will start on `http://localhost:8000`
+L'API démarrera sur `http://localhost:8000`
 
-### 4. Test the API
+### 4. Tester l'API
 
-Visit http://localhost:8000/api/v1/health
+Accédez à :
 
-You should see:
+`http://localhost:8000/api/v1/health`
+
+Vous devriez obtenir :
+
 ```json
 {
   "status": "ok",
@@ -67,65 +71,65 @@ You should see:
 }
 ```
 
-## Running Tests
+## Exécution des tests
 
-### Install Test Dependencies
+### Installer les dépendances de test
 
 ```bash
 pip install -r requirement.txt
 ```
 
-### Run All Tests
+### Exécuter tous les tests
 
 ```bash
 pytest
 ```
 
-### Run Tests with Verbose Output
+### Exécuter les tests avec une sortie détaillée
 
 ```bash
 pytest -v
 ```
 
-### Run Specific Test File
+### Exécuter un fichier de test spécifique
 
 ```bash
 pytest tests/test_mqtt_handlers.py
 ```
 
-### Run Specific Test
+### Exécuter un test spécifique
 
 ```bash
 pytest tests/test_mqtt_handlers.py::TestHandleTelemetry::test_valid_telemetry
 ```
 
-## Troubleshooting
+## Dépannage
 
-### pytest not found
+### pytest introuvable
 
-If you get "pytest: command not found", install it:
+Si vous obtenez l'erreur `"pytest: command not found"`, installez-le :
 
 ```bash
 pip install pytest pytest-asyncio
 ```
 
-Or use Python module syntax:
+Vous pouvez également utiliser la syntaxe de module Python :
 
 ```bash
 python -m pytest
 ```
 
-### Import errors
+### Erreurs d'importation
 
-Make sure you're in the `api` directory:
+Assurez-vous d'être dans le répertoire `api` :
 
 ```bash
 cd api
 python -m pytest
 ```
 
-### MQTT connection errors
+### Erreurs de connexion MQTT
 
-- Ensure Mosquitto broker is running
-- Check MQTT_HOST and MQTT_PORT in .env
-- For testing, use MQTT_USE_TLS=false
+- Assurez-vous que le broker Mosquitto est en cours d'exécution
+- Vérifiez `MQTT_HOST` et `MQTT_PORT` dans le fichier `.env`
+- Pour les tests, utilisez `MQTT_USE_TLS=false`

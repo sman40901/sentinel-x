@@ -1,55 +1,55 @@
-# Sentinel-X ESP32 Firmware
+# Firmware ESP32 Sentinel-X
 
-Firmware for the Sentinel-X IoT monitoring system using ESP32, sensors, and MQTT.
+Firmware pour le système de surveillance IoT Sentinel-X utilisant un ESP32, des capteurs et MQTT.
 
-## Hardware Components
+## Composants matériels
 
-- **ESP32 DevKit** - Microcontroller
-- **DHT22** - Temperature and humidity sensor
-- **MQ-2** - Gas and smoke sensor (analog)
-- **PIR HC-SR501** - Motion detector
-- **Active Buzzer** - Sound alarm
-- **LEDs** - Red and yellow status indicators
+- **ESP32 DevKit** - Microcontrôleur
+- **DHT22** - Capteur de température et d'humidité
+- **MQ-2** - Capteur de gaz et de fumée (analogique)
+- **PIR HC-SR501** - Détecteur de mouvement
+- **Buzzer actif** - Alarme sonore
+- **LED** - Indicateurs d'état rouge et jaune
 
-## Wiring
+## Câblage
 
 ### DHT22
 - VCC → 3.3V
-- DATA → GPIO 4 (configurable in `config.h`)
+- DATA → GPIO 4 (configurable dans `config.h`)
 - GND → GND
 
 ### MQ-2
 - VCC → 5V (VIN)
 - GND → GND
-- AO → GPIO 34 (ADC1_CH6, configurable in `config.h`)
-- DO → Not used (we use analog output)
+- AO → GPIO 34 (ADC1_CH6, configurable dans `config.h`)
+- DO → Non utilisé (nous utilisons la sortie analogique)
 
-**Important**: MQ-2 outputs up to 5V, so ensure proper voltage divider if needed.
+**Important** : le MQ-2 peut fournir une tension de sortie allant jusqu'à 5V. Assurez-vous donc d'utiliser un diviseur de tension adapté si nécessaire.
 
 ### PIR HC-SR501
 - VCC → 5V (VIN)
-- OUT → GPIO 27 (configurable in `config.h`)
+- OUT → GPIO 27 (configurable dans `config.h`)
 - GND → GND
 
-### Active Buzzer
-- S → GPIO 26 (configurable in `config.h`)
+### Buzzer actif
+- S → GPIO 26 (configurable dans `config.h`)
 - VCC → 5V
 - GND → GND
 
-### LEDs
-- Red LED anode → GPIO 25 with 220Ω resistor → GND
-- Yellow LED anode → GPIO 33 with 220Ω resistor → GND
+### LED
+- Anode de la LED rouge → GPIO 25 avec une résistance de 220Ω → GND
+- Anode de la LED jaune → GPIO 33 avec une résistance de 220Ω → GND
 
 ## Installation
 
-### Prerequisites
+### Prérequis
 
-1. Install [PlatformIO](https://platformio.org/)
-2. Install VS Code with PlatformIO extension (recommended)
+1. Installer [PlatformIO](https://platformio.org/)
+2. Installer VS Code avec l'extension PlatformIO (recommandé)
 
 ### Configuration
 
-Edit `include/config.h`:
+Modifier `include/config.h` :
 
 ```cpp
 #define WIFI_SSID "your_wifi"
@@ -59,27 +59,28 @@ Edit `include/config.h`:
 #define GROUP_ID "g01"
 ```
 
-### Environment Selection
+### Sélection de l'environnement
 
-The firmware supports two environments:
+Le firmware prend en charge deux environnements :
 
-**Test/Development (default)**:
-- MQTT Port: 1883 (plain MQTT)
-- TLS: Disabled
-- Authentication: Disabled
-- Build with: `pio run -e esp32dev`
+**Test/Développement (par défaut)** :
+- Port MQTT : 1883 (MQTT non chiffré)
+- TLS : Désactivé
+- Authentification : Désactivée
+- Compilation avec : `pio run -e esp32dev`
 
-**Production**:
-- MQTT Port: 8883 (MQTTS)
-- TLS: Enabled
-- Authentication: Enabled
-- Build with: `pio run -e esp32dev_prod`
+**Production** :
+- Port MQTT : 8883 (MQTTS)
+- TLS : Activé
+- Authentification : Activée
+- Compilation avec : `pio run -e esp32dev_prod`
 
-To switch environments, use the appropriate environment in `platformio.ini` or specify it when building.
+Pour changer d'environnement, utilisez l'environnement approprié dans `platformio.ini` ou spécifiez-le lors de la compilation.
 
-### Build and Upload
+### Compilation et téléversement
 
-Using PlatformIO CLI:
+Avec l'interface en ligne de commande de PlatformIO :
+
 ```bash
 cd firmware
 pio run
@@ -87,62 +88,65 @@ pio run --target upload
 pio device monitor
 ```
 
-Or use VS Code PlatformIO extension buttons.
+Vous pouvez également utiliser les boutons de l'extension PlatformIO dans VS Code.
 
-## MQTT Topics
+## Topics MQTT
 
-### Publishing
+### Publication
 
-- **Telemetry**: `sentinelx/{GROUP_ID}/telemetry`
-  - Payload: `{"t":24.1,"h":48,"gaz":312,"pir":0}`
-  - Published every 2 seconds
+- **Télémétrie** : `sentinelx/{GROUP_ID}/telemetry`
+  - Charge utile : `{"t":24.1,"h":48,"gaz":312,"pir":0}`
+  - Publiée toutes les 2 secondes
 
-- **Alerts**: `sentinelx/{GROUP_ID}/alerts`
-  - Payload: `{"type":"gaz","niveau":"critique"}`
-  - Published when gas threshold exceeded
+- **Alertes** : `sentinelx/{GROUP_ID}/alerts`
+  - Charge utile : `{"type":"gaz","niveau":"critique"}`
+  - Publiées lorsque le seuil de gaz est dépassé
 
-- **Status**: `sentinelx/{GROUP_ID}/status`
-  - Payload: `online` or `offline`
-  - Published on connection/disconnection
+- **Statut** : `sentinelx/{GROUP_ID}/status`
+  - Charge utile : `online` ou `offline`
+  - Publié lors de la connexion/déconnexion
 
-### Subscribing
+### Abonnement
 
-- **Commands**: `sentinelx/{GROUP_ID}/cmd`
-  - Payload: `{"buzzer":1,"led":"rouge"}`
-  - `buzzer`: 0 or 1
-  - `led`: "rouge", "jaune", "blanc", or "eteint"
+- **Commandes** : `sentinelx/{GROUP_ID}/cmd`
+  - Charge utile : `{"buzzer":1,"led":"rouge"}`
+  - `buzzer` : 0 ou 1
+  - `led` : `"rouge"`, `"jaune"`, `"blanc"` ou `"eteint"`
 
 ## Calibration
 
-### MQ-2 Gas Sensor
+### Capteur de gaz MQ-2
 
-The MQ-2 requires a warm-up period of 1-2 minutes before providing stable readings. Adjust the `GAS_ALERT_THRESHOLD` in `config.h` based on your environment.
+Le MQ-2 nécessite une période de préchauffage de 1 à 2 minutes avant de fournir des mesures stables. Ajustez la valeur `GAS_ALERT_THRESHOLD` dans `config.h` en fonction de votre environnement.
 
 ### DHT22
 
-Readings should be taken at most once every 2 seconds. The firmware respects this limitation.
+Les mesures doivent être effectuées au maximum une fois toutes les 2 secondes. Le firmware respecte cette limitation.
 
-## Troubleshooting
+## Dépannage
 
-### WiFi Connection Issues
-- Check SSID and password in `config.h`
-- Ensure ESP32 is within range of your WiFi router
-- Check Serial Monitor (115200 baud) for error messages
+### Problèmes de connexion WiFi
 
-### MQTT Connection Issues
-- Verify MQTT broker address and port
-- Check if broker requires authentication
-- Ensure broker is running and accessible
+- Vérifiez le SSID et le mot de passe dans `config.h`
+- Assurez-vous que l'ESP32 se trouve à portée de votre routeur WiFi
+- Consultez le moniteur série (115200 bauds) pour identifier les messages d'erreur
 
-### Sensor Readings
-- **DHT22**: If readings are NaN, check wiring and try a different GPIO
-- **MQ-2**: If readings are always 0 or 4095, check power supply and voltage divider
-- **PIR**: Use the onboard potentiometers to adjust sensitivity and delay
+### Problèmes de connexion MQTT
 
-## API Integration
+- Vérifiez l'adresse et le port du broker MQTT
+- Vérifiez si le broker nécessite une authentification
+- Assurez-vous que le broker est en cours d'exécution et accessible
 
-This firmware is designed to work with the Sentinel-X Python API located in the `../api` directory. The API expects telemetry in the format sent by this firmware.
+### Mesures des capteurs
 
-## License
+- **DHT22** : si les mesures retournent `NaN`, vérifiez le câblage et essayez un autre GPIO
+- **MQ-2** : si les valeurs sont toujours `0` ou `4095`, vérifiez l'alimentation et le diviseur de tension
+- **PIR** : utilisez les potentiomètres intégrés pour régler la sensibilité et le délai
 
-Educational project for EPSI Workshop Sentinel-X.
+## Intégration avec l'API
+
+Ce firmware est conçu pour fonctionner avec l'API Python Sentinel-X située dans le répertoire `../api`. L'API attend les données de télémétrie au format envoyé par ce firmware.
+
+## Licence
+
+Projet pédagogique réalisé dans le cadre du Workshop Sentinel-X d'EPSI.
