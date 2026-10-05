@@ -1,0 +1,6 @@
+# Secrets : jamais dans Git (exigé par le sujet)
+.env
+certs/*.key
+certs/*.crt
+!certs/.gitkeep
+mosquitto/config/passwd
