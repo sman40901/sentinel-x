@@ -2,38 +2,38 @@
 #define CONFIG_H
 
 // =========================================================
-// WiFi Configuration
+// Configuration WiFi
 // =========================================================
 
 #define WIFI_SSID "your_wifi"
 #define WIFI_PASSWORD "your_wifi_password"
 
 // =========================================================
-// Environment Configuration
+// Configuration de l'environnement
 // =========================================================
 
-// Set to 1 for production, 0 for test/development
-// Can be overridden in platformio.ini with build_flags
+// Définir à 1 pour la production, 0 pour le test/développement
+// Peut être remplacé dans platformio.ini avec build_flags
 #ifndef IS_PRODUCTION
 #define IS_PRODUCTION 0
 #endif
 
 // =========================================================
-// MQTT Configuration
+// Configuration MQTT
 // =========================================================
 
 #define MQTT_HOST "192.168.1.50"
 #define GROUP_ID "g01"
 
-// Conditional configuration based on environment
+// Configuration conditionnelle selon l'environnement
 #if IS_PRODUCTION
-  // Production: TLS, authentication, port 8883
+  // Production : TLS, authentification, port 8883
   #define MQTT_PORT 8883
   #define MQTT_USE_TLS true
   #define MQTT_USERNAME "esp32"
   #define MQTT_PASSWORD "your_mqtt_password"
 #else
-  // Test/Development: No TLS, no auth, port 1883
+  // Test/Développement : sans TLS, sans authentification, port 1883
   #define MQTT_PORT 1883
   #define MQTT_USE_TLS false
   #define MQTT_USERNAME "esp32"
@@ -41,27 +41,27 @@
 #endif
 
 // =========================================================
-// GPIO Pin Assignments
+// Affectation des broches GPIO
 // =========================================================
 
-#define PIN_DHT22 4           // DHT22 data pin
-#define PIN_MQ2_AO 34         // MQ-2 analog output (GPIO 32-39)
-#define PIN_PIR 27            // PIR motion sensor
-#define PIN_BUZZER 26         // Active buzzer
-#define PIN_LED_RED 25        // Red LED
-#define PIN_LED_YELLOW 33     // Yellow LED
+#define PIN_DHT22 4           // Broche de données du DHT22
+#define PIN_MQ2_AO 34         // Sortie analogique du MQ-2 (GPIO 32-39)
+#define PIN_PIR 27            // Capteur de mouvement PIR
+#define PIN_BUZZER 26         // Buzzer actif
+#define PIN_LED_RED 25        // LED rouge
+#define PIN_LED_YELLOW 33     // LED jaune
 
 // =========================================================
-// Timing Configuration
+// Configuration des intervalles de temps
 // =========================================================
 
-#define TELEMETRY_INTERVAL 5000    // 5 seconds (ms)
-#define MQTT_RECONNECT_INTERVAL 5000  // 5 seconds (ms)
+#define TELEMETRY_INTERVAL 5000        // 5 secondes (ms)
+#define MQTT_RECONNECT_INTERVAL 5000   // 5 secondes (ms)
 
 // =========================================================
-// Thresholds
+// Seuils
 // =========================================================
 
-#define GAS_ALERT_THRESHOLD 1500    // Analog value threshold for gas alert
+#define GAS_ALERT_THRESHOLD 1500    // Seuil de la valeur analogique pour l'alerte de gaz
 
 #endif // CONFIG_H

@@ -33,7 +33,7 @@ MQTT_HOST = os.getenv(
     "192.168.1.50",
 )
 
-# Set defaults based on environment
+# Définir les valeurs par défaut selon l'environnement
 if ENVIRONMENT == "prod":
     MQTT_USE_TLS_DEFAULT = "true"
     MQTT_PORT_DEFAULT = "8883"
@@ -79,7 +79,7 @@ GROUP_ID = os.getenv(
 
 
 # =========================================================
-# MQTT topics
+# Topics MQTT
 # =========================================================
 
 TOPIC_TELEMETRY = (
@@ -100,7 +100,7 @@ TOPIC_COMMAND = (
 
 
 # =========================================================
-# Callbacks
+# Fonctions de rappel
 # =========================================================
 
 def on_connect(
@@ -111,7 +111,7 @@ def on_connect(
     properties,
 ):
     """
-    Called after connecting to Mosquitto.
+    Appelée après la connexion à Mosquitto.
     """
 
     if reason_code != 0:
@@ -127,7 +127,7 @@ def on_connect(
         MQTT_PORT,
     )
 
-    # Subscribe to inputs used by our API.
+    # S'abonner aux entrées utilisées par notre API.
 
     subscriptions = [
         (TOPIC_TELEMETRY, 1),
@@ -159,8 +159,8 @@ def on_disconnect(
     properties,
 ):
     """
-    Called if connection with Mosquitto is lost
-    or closed.
+    Appelée si la connexion avec Mosquitto est perdue
+    ou fermée.
     """
 
     if reason_code == 0:
@@ -181,7 +181,8 @@ def on_message(
     message,
 ):
     """
-    Called whenever a subscribed MQTT message arrives.
+    Appelée à chaque fois qu'un message MQTT
+    provenant d'un topic souscrit est reçu.
     """
 
     try:
@@ -201,7 +202,7 @@ def on_message(
         message.topic,
     )
 
-    # Route the message to the correct handler.
+    # Rediriger le message vers le gestionnaire approprié.
 
     if message.topic == TOPIC_TELEMETRY:
 
@@ -224,13 +225,13 @@ def on_message(
 
 
 # =========================================================
-# Create client
+# Création du client
 # =========================================================
 
 def create_mqtt_client() -> mqtt.Client:
     """
-    Create and configure the Sentinel-X
-    MQTT API client.
+    Créer et configurer le client MQTT
+    de l'API Sentinel-X.
     """
 
     client = mqtt.Client(
@@ -244,7 +245,7 @@ def create_mqtt_client() -> mqtt.Client:
     )
 
     # -------------------------
-    # Authentication
+    # Authentification
     # -------------------------
 
     if MQTT_USERNAME:
@@ -268,7 +269,7 @@ def create_mqtt_client() -> mqtt.Client:
             tls_version=ssl.PROTOCOL_TLS,
         )
 
-        # Keep certificate verification enabled.
+        # Maintenir la vérification du certificat activée.
         client.tls_insecure_set(False)
     else:
         logger.warning(
@@ -276,7 +277,7 @@ def create_mqtt_client() -> mqtt.Client:
         )
 
     # -------------------------
-    # Callbacks
+    # Fonctions de rappel
     # -------------------------
 
     client.on_connect = on_connect
@@ -284,7 +285,7 @@ def create_mqtt_client() -> mqtt.Client:
     client.on_message = on_message
 
     # -------------------------
-    # Reconnection
+    # Reconnexion
     # -------------------------
 
     client.reconnect_delay_set(
@@ -296,13 +297,13 @@ def create_mqtt_client() -> mqtt.Client:
 
 
 # =========================================================
-# Start MQTT
+# Démarrage de MQTT
 # =========================================================
 
 def start_mqtt() -> mqtt.Client:
     """
-    Connect to Mosquitto and start the
-    MQTT network loop in the background.
+    Se connecter à Mosquitto et démarrer
+    la boucle réseau MQTT en arrière-plan.
     """
 
     client = create_mqtt_client()
@@ -321,7 +322,7 @@ def start_mqtt() -> mqtt.Client:
 
     client.loop_start()
 
-    # Wait for connection to be established
+    # Attendre que la connexion soit établie
     max_wait = 5
     waited = 0
     while not client.is_connected() and waited < max_wait:
@@ -342,14 +343,14 @@ def start_mqtt() -> mqtt.Client:
 
 
 # =========================================================
-# Stop MQTT
+# Arrêt de MQTT
 # =========================================================
 
 def stop_mqtt(
     client: mqtt.Client
 ) -> None:
     """
-    Gracefully stop the MQTT client.
+    Arrêter proprement le client MQTT.
     """
 
     logger.info(

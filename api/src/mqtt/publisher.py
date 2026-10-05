@@ -18,9 +18,9 @@ def publish_command(
     led: str,
 ) -> bool:
     """
-    Publish a command to the ESP32.
+    Publier une commande vers l'ESP32.
 
-    Example payload:
+    Exemple de charge utile :
 
     {
         "buzzer": 1,
@@ -29,7 +29,7 @@ def publish_command(
     """
 
     # -------------------------
-    # Validate command
+    # Valider la commande
     # -------------------------
 
     if buzzer not in (0, 1):
@@ -64,7 +64,7 @@ def publish_command(
     payload = json.dumps(command)
 
     # -------------------------
-    # Publish MQTT message
+    # Publier le message MQTT
     # -------------------------
 
     result = client.publish(

@@ -3,14 +3,15 @@
 import json
 import logging
 
+
 logger = logging.getLogger("sentinelx.mqtt.handlers")
 
 
 def handle_telemetry(payload: str) -> None:
     """
-    Process telemetry received from the ESP32.
+    Traiter les données de télémétrie reçues de l'ESP32.
 
-    Expected payload:
+    Charge utile attendue :
     {
         "t": 24.1,
         "h": 48,
@@ -30,7 +31,7 @@ def handle_telemetry(payload: str) -> None:
                     f"Missing telemetry field: {field}"
                 )
 
-        # Basic type validation
+        # Validation de base des types
         if not isinstance(data["t"], (int, float)):
             raise ValueError("'t' must be a number")
 
@@ -52,10 +53,10 @@ def handle_telemetry(payload: str) -> None:
 
         logger.info("Telemetry received: %s", telemetry)
 
-        # TODO:
-        # Save telemetry into PostgreSQL.
+        # À FAIRE :
+        # Enregistrer la télémétrie dans PostgreSQL.
         #
-        # Example later:
+        # Exemple pour plus tard :
         #
         # telemetry_service.save(telemetry)
 
@@ -74,9 +75,9 @@ def handle_telemetry(payload: str) -> None:
 
 def handle_alert(payload: str) -> None:
     """
-    Process an alert coming from ESP32 or AI.
+    Traiter une alerte provenant de l'ESP32 ou de l'IA.
 
-    Expected example:
+    Exemple attendu :
     {
         "type": "gaz",
         "niveau": "critique"
@@ -116,8 +117,8 @@ def handle_alert(payload: str) -> None:
             alert
         )
 
-        # TODO:
-        # Save alert into PostgreSQL.
+        # À FAIRE :
+        # Enregistrer l'alerte dans PostgreSQL.
         #
         # alert_service.save(alert)
 
@@ -136,12 +137,12 @@ def handle_alert(payload: str) -> None:
 
 def handle_status(payload: str) -> None:
     """
-    Process ESP32 connection status.
+    Traiter l'état de connexion de l'ESP32.
 
-    Expected:
+    Valeur attendue :
         online
 
-    or:
+    ou :
         offline
     """
 
@@ -159,7 +160,7 @@ def handle_status(payload: str) -> None:
         status
     )
 
-    # TODO:
-    # Update ESP32 status in PostgreSQL.
+    # À FAIRE :
+    # Mettre à jour l'état de l'ESP32 dans PostgreSQL.
     #
     # device_service.update_status(status)
