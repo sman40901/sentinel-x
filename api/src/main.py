@@ -20,28 +20,28 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "test").lower()
 logger.info(f"Environment: {ENVIRONMENT.upper()}")
 
 
-# This variable will hold our MQTT client.
+# Cette variable contiendra notre client MQTT.
 mqtt_client = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Called when the API starts and stops.
+    Appelée lorsque l'API démarre et s'arrête.
     """
 
     global mqtt_client
 
     # -----------------------------------------
-    # API startup
+    # Démarrage de l'API
     # -----------------------------------------
 
     logger.info("Starting Sentinel-X API")
 
     mqtt_client = start_mqtt()
 
-    # Make the MQTT client accessible to
-    # REST routes later.
+    # Rendre le client MQTT accessible
+    # aux routes REST ultérieurement.
     app.state.mqtt_client = mqtt_client
 
     logger.info("MQTT client started")
@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # -----------------------------------------
-    # API shutdown
+    # Arrêt de l'API
     # -----------------------------------------
 
     logger.info("Stopping Sentinel-X API")
@@ -70,8 +70,8 @@ app = FastAPI(
 @app.get("/api/v1/health")
 def health(request: Request):
     """
-    Simple endpoint to verify that
-    the REST API is running.
+    Endpoint simple permettant de vérifier
+    que l'API REST fonctionne.
     """
 
     mqtt_connected = (
