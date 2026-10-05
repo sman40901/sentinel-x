@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sentinel-X · Centre de commandement</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== Écran de connexion ===== -->
+<section id="login" class="login">
+  <form id="loginForm" class="login-card" autocomplete="on">
+    <div class="brand"><span class="dot"></span>SENTINEL-X</div>
+    <p class="muted">Centre de commandement · AetherCorp</p>
+    <label for="user">Utilisateur MQTT</label>
+    <input id="user" name="user" value="dashboard" autocomplete="username" required>
+    <label for="pass">Mot de passe</label>
+    <input id="pass" name="pass" type="password" autocomplete="current-password" required>
+    <button type="submit" class="btn primary" id="loginBtn">Se connecter</button>
+    <p id="loginErr" class="err" hidden></p>
+    <button type="button" class="btn ghost" id="demoBtn">Mode simulation (sans boîtier)</button>
+  </form>
+</section>
+
+<!-- ===== Dashboard ===== -->
+<main id="app" hidden>
+  <header class="top">
+    <div class="brand"><span class="dot" id="brandDot"></span>SENTINEL-X <small id="groupLbl"></small></div>
+    <div class="pills">
+      <span class="pill" id="pillBroker">Broker : —</span>
+      <span class="pill" id="pillBox">Boîtier : —</span>
+      <span class="pill" id="pillLast">Dernière mesure : —</span>
+    </div>
+    <button class="btn ghost small" id="logoutBtn">Déconnexion</button>
+  </header>
+
+  <div id="simBanner" class="banner sim" hidden>MODE SIMULATION — données générées localement, aucun boîtier connecté</div>
+  <div id="alertBanner" class="banner crit" hidden></div>
+
+  <section class="tiles">
+    <article class="tile" id="tileTemp"><h3>Température</h3><p class="val"><span id="vTemp">—</span><small>°C</small></p><p class="sub" id="sTemp">DHT22</p></article>
+    <article class="tile" id="tileHum"><h3>Humidité</h3><p class="val"><span id="vHum">—</span><small>%</small></p><p class="sub">DHT22</p></article>
+    <article class="tile" id="tileGaz"><h3>Gaz / fumée</h3><p class="val"><span id="vGaz">—</span><small>brut</small></p><p class="sub" id="sGaz">MQ-2</p></article>
+    <article class="tile" id="tilePir"><h3>Mouvement</h3><p class="val"><span id="vPir">—</span></p><p class="sub">PIR HC-SR501</p></article>
+    <article class="tile" id="tileAlerts"><h3>Alertes</h3><p class="val"><span id="vAlerts">0</span></p><p class="sub">depuis l'ouverture</p></article>
+  </section>
+
+  <section class="grid">
+    <article class="panel span2">
+      <header><h2>Température &amp; humidité</h2><span class="legend"><i class="c1"></i>°C <i class="c2"></i>%</span></header>
+      <canvas id="chartTH"></canvas>
+    </article>
+    <article class="panel">
+      <header><h2>Webcam · détection IA</h2><span class="tag" id="camTag">hors ligne</span></header>
+      <div class="cam">
+        <img id="cam" alt="Flux webcam analysé par l'IA">
+        <div class="cam-off" id="camOff">Flux indisponible<br><small>script IA non lancé (port 8080)</small></div>
+      </div>
+    </article>
+    <article class="panel span2">
+      <header><h2>Gaz (MQ-2)</h2><span class="legend"><i class="c3"></i>valeur brute</span></header>
+      <canvas id="chartGaz"></canvas>
+    </article>
+    <article class="panel">
+      <header><h2>Commandes boîtier</h2></header>
+      <div class="ctrl">
+        <p class="lbl">Buzzer d'alarme</p>
+        <div class="row">
+          <button class="btn danger" data-cmd='{"buzzer":1}'>Activer</button>
+          <button class="btn" data-cmd='{"buzzer":0}'>Couper</button>
+        </div>
+        <p class="lbl">LEDs d'état</p>
+        <div class="row">
+          <button class="btn led g" data-cmd='{"led":"vert"}'>Vert</button>
+          <button class="btn led y" data-cmd='{"led":"jaune"}'>Jaune</button>
+          <button class="btn led r" data-cmd='{"led":"rouge"}'>Rouge</button>
+          <button class="btn" data-cmd='{"led":"off"}'>Éteindre</button>
+        </div>
+      </div>
+    </article>
+    <article class="panel span3">
+      <header><h2>Journal des événements</h2><button class="btn ghost small" id="clearLog">Vider</button></header>
+      <ol class="log" id="log"></ol>
+    </article>
+  </section>
+
+  <footer class="foot">Sentinel-X · la sécurité à la bordure</footer>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
