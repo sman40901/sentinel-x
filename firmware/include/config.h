@@ -9,14 +9,36 @@
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 
 // =========================================================
+// Environment Configuration
+// =========================================================
+
+// Set to 1 for production, 0 for test/development
+// Can be overridden in platformio.ini with build_flags
+#ifndef IS_PRODUCTION
+#define IS_PRODUCTION 0
+#endif
+
+// =========================================================
 // MQTT Configuration
 // =========================================================
 
 #define MQTT_HOST "mosquitto"
-#define MQTT_PORT 1883
-#define MQTT_USERNAME "api"
-#define MQTT_PASSWORD "your_mqtt_password"
 #define GROUP_ID "g0X"
+
+// Conditional configuration based on environment
+#if IS_PRODUCTION
+  // Production: TLS, authentication, port 8883
+  #define MQTT_PORT 8883
+  #define MQTT_USE_TLS true
+  #define MQTT_USERNAME "api"
+  #define MQTT_PASSWORD "your_mqtt_password"
+#else
+  // Test/Development: No TLS, no auth, port 1883
+  #define MQTT_PORT 1883
+  #define MQTT_USE_TLS false
+  #define MQTT_USERNAME ""
+  #define MQTT_PASSWORD ""
+#endif
 
 // =========================================================
 // GPIO Pin Assignments

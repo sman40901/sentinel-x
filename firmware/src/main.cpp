@@ -1,6 +1,8 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
+#include <WiFiClientSecure.h>
+#include <cstring>
 #include "config.h"
 
 // =========================================================
@@ -16,7 +18,12 @@ String topicCommand = "sentinelx/" + String(GROUP_ID) + "/cmd";
 // Global Objects
 // =========================================================
 
+#if MQTT_USE_TLS
+WiFiClientSecure wifiClient;
+#else
 WiFiClient wifiClient;
+#endif
+
 PubSubClient mqttClient(wifiClient);
 DHT dht(PIN_DHT22, DHT22);
 
@@ -104,20 +111,28 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 void connectMQTT() {
   if (!mqttClient.connected()) {
     Serial.print("Attempting MQTT connection...");
-    
+
     String clientId = "sentinelx-" + String(GROUP_ID) + "-esp32";
-    
+
+#if MQTT_USE_TLS
+    // Configure TLS for production
+    wifiClient.setInsecure(); // For development with self-signed certs
+    // For production, load CA certificate:
+    // wifiClient.setCACert(ca_cert);
+    Serial.println(" (TLS enabled)");
+#endif
+
     if (mqttClient.connect(clientId.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
       Serial.println("connected");
-      
+
       // Subscribe to command topic
       mqttClient.subscribe(topicCommand.c_str());
       Serial.print("Subscribed to: ");
       Serial.println(topicCommand);
-      
+
       // Publish online status
       mqttClient.publish(topicStatus.c_str(), "online");
-      
+
     } else {
       Serial.print("failed, rc=");
       Serial.print(mqttClient.state());
@@ -176,6 +191,14 @@ void publishTelemetry() {
 void setup() {
   Serial.begin(115200);
   Serial.println("Sentinel-X ESP32 Firmware");
+  Serial.print("Environment: ");
+  Serial.println(IS_PRODUCTION ? "PRODUCTION" : "TEST/DEVELOPMENT");
+  Serial.print("MQTT Port: ");
+  Serial.println(MQTT_PORT);
+  Serial.print("MQTT TLS: ");
+  Serial.println(MQTT_USE_TLS ? "enabled" : "disabled");
+  Serial.print("MQTT Auth: ");
+  Serial.println(strlen(MQTT_USERNAME) > 0 ? "enabled" : "disabled");
 
   // Initialize pins
   pinMode(PIN_BUZZER, OUTPUT);

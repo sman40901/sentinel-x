@@ -56,11 +56,26 @@ Edit `include/config.h`:
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 
 #define MQTT_HOST "mosquitto"
-#define MQTT_PORT 1883
-#define MQTT_USERNAME "api"
-#define MQTT_PASSWORD "your_mqtt_password"
 #define GROUP_ID "g0X"
 ```
+
+### Environment Selection
+
+The firmware supports two environments:
+
+**Test/Development (default)**:
+- MQTT Port: 1883 (plain MQTT)
+- TLS: Disabled
+- Authentication: Disabled
+- Build with: `pio run -e esp32dev`
+
+**Production**:
+- MQTT Port: 8883 (MQTTS)
+- TLS: Enabled
+- Authentication: Enabled
+- Build with: `pio run -e esp32dev_prod`
+
+To switch environments, use the appropriate environment in `platformio.ini` or specify it when building.
 
 ### Build and Upload
 

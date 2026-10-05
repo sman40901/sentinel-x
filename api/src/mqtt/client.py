@@ -23,30 +23,48 @@ logger = logging.getLogger(
 # Configuration
 # =========================================================
 
+ENVIRONMENT = os.getenv(
+    "ENVIRONMENT",
+    "test",
+).lower()
+
 MQTT_HOST = os.getenv(
     "MQTT_HOST",
     "mosquitto",
 )
 
+# Set defaults based on environment
+if ENVIRONMENT == "prod":
+    MQTT_USE_TLS_DEFAULT = "true"
+    MQTT_PORT_DEFAULT = "8883"
+    MQTT_USERNAME_DEFAULT = "api"
+    MQTT_PASSWORD_DEFAULT = "your_mqtt_password"
+else:
+    MQTT_USE_TLS_DEFAULT = "false"
+    MQTT_PORT_DEFAULT = "1883"
+    MQTT_USERNAME_DEFAULT = ""
+    MQTT_PASSWORD_DEFAULT = ""
+
 MQTT_USE_TLS = os.getenv(
     "MQTT_USE_TLS",
-    "true",
+    MQTT_USE_TLS_DEFAULT,
 ).lower() == "true"
 
 MQTT_PORT = int(
     os.getenv(
         "MQTT_PORT",
-        "8883" if MQTT_USE_TLS else "1883",
+        MQTT_PORT_DEFAULT,
     )
 )
 
 MQTT_USERNAME = os.getenv(
     "MQTT_USERNAME",
-    "api",
+    MQTT_USERNAME_DEFAULT,
 )
 
 MQTT_PASSWORD = os.getenv(
-    "MQTT_PASSWORD"
+    "MQTT_PASSWORD",
+    MQTT_PASSWORD_DEFAULT,
 )
 
 MQTT_CA_CERT = os.getenv(

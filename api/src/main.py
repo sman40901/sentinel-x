@@ -1,6 +1,7 @@
 # api/src/main.py
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -14,6 +15,9 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("sentinelx.api")
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "test").lower()
+logger.info(f"Environment: {ENVIRONMENT.upper()}")
 
 
 # This variable will hold our MQTT client.
