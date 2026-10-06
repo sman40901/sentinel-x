@@ -1,3 +1,5 @@
+--  ne utilize pas
+
 -- Sentinel-X PostgreSQL schema
 -- Initial V1 database design
 
