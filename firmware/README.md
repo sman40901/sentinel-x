@@ -1,207 +1,285 @@
-<<<<<<< HEAD
-# Firmware ESP32 Sentinel-X
+# Firmware Sentinel-X — NodeMCU LoLin V3 / ESP8266MOD (ESP-12F)
 
-Firmware pour le système de surveillance IoT Sentinel-X utilisant un ESP32, des capteurs et MQTT.
+> **Ce firmware cible un ESP8266, pas un ESP32.** Les versions précédentes de ce
+> dossier visaient un ESP32 DevKit (GPIO 34, `setCACert()`, ADC 0-4095). Rien de
+> tout cela ne compile ni ne fonctionne sur la carte réellement utilisée. Si vous
+> voyez une erreur sur `WiFiClientSecure::setCACert` ou `GPIO34`, vous avez un
+> reste de l'ancienne cible.
 
-## Composants matériels
+Le boîtier :
 
-- **ESP32 DevKit** - Microcontrôleur
-- **DHT22** - Capteur de température et d'humidité
-- **MQ-2** - Capteur de gaz et de fumée (analogique)
-- **PIR HC-SR501** - Détecteur de mouvement
-- **Buzzer actif** - Alarme sonore
-- **LED** - Indicateurs d'état rouge et jaune
+- lit 4 capteurs (température/humidité, mouvement, gaz, inclinaison),
+- détecte les appareils WiFi autour de lui, **y compris à travers les murs**,
+- résume tout ça sur 3 LEDs (verte / jaune / rouge),
+- **héberge son propre point d'accès et son propre tableau de bord**,
+- publie sa télémétrie en MQTT vers la stack Docker du PC serveur.
 
-## Câblage
+Tous les réglages sont dans un seul fichier : **`include/config.h`**. Rien
+d'autre ne devrait avoir besoin d'être modifié pour changer un seuil, une
+broche ou un intervalle.
 
-### DHT22
-- VCC → 3.3V
-- DATA → GPIO 4 (configurable dans `config.h`)
-- GND → GND
+---
 
-### MQ-2
-- VCC → 5V (VIN)
-- GND → GND
-- AO → GPIO 34 (ADC1_CH6, configurable dans `config.h`)
-- DO → Non utilisé (nous utilisons la sortie analogique)
+## Matériel
 
-**Important** : le MQ-2 peut fournir une tension de sortie allant jusqu'à 5V. Assurez-vous donc d'utiliser un diviseur de tension adapté si nécessaire.
+| | |
+|---|---|
+| Carte | NodeMCU LoLin V3, module **ESP8266MOD (ESP-12F)**, USB-série CH340 |
+| Carte PlatformIO | `nodemcuv2` (`platform = espressif8266`) |
+| Moniteur série | 115200 bauds |
 
-### PIR HC-SR501
-- VCC → 5V (VIN)
-- OUT → GPIO 27 (configurable dans `config.h`)
-- GND → GND
+### Brochage
 
-### Buzzer actif
-- S → GPIO 26 (configurable dans `config.h`)
-- VCC → 5V
-- GND → GND
+| Rôle | Broche | Alim | Remarque |
+|---|---|---|---|
+| DHT22 `DATA` | `D2` (GPIO4) | **3.3 V** | boîtier blanc = DHT22, bleu = DHT11 |
+| PIR HC-SR501 `OUT` | `D1` (GPIO5) | **5 V** (`VU`) | `OUT` sort en 3,3 V : branchement direct OK |
+| MQ gaz `AO` | `A0` | **5 V** (`VU`) | **via pont diviseur 68k+68k** |
+| MQ gaz `DO` | *rien* | — | monte à 5 V, détruirait l'ESP8266 |
+| MPU-6500 `SDA` / `SCL` | `D6` / `D7` | **3.3 V** | I2C `0x68`, **100 kHz obligatoire** |
+| 🟢 LED verte (validation) | `D5` (GPIO14) | — | `D5 → 220 Ω → LED → GND` |
+| 🟡 LED jaune (pré-alerte) | `D0` (GPIO16) | — | idem |
+| 🔴 LED rouge (intrusion) | `D8` (GPIO15) | — | idem — **sens imposé, voir ci-dessous** |
+| Buzzer (option) | `D3` (GPIO0) | — | **actif à l'état bas**, voir ci-dessous |
 
-### LED
-- Anode de la LED rouge → GPIO 25 avec une résistance de 220Ω → GND
-- Anode de la LED jaune → GPIO 33 avec une résistance de 220Ω → GND
+#### Les deux pièges de câblage qui empêchent la carte de démarrer
+
+Ce ne sont pas des recommandations, c'est le strap de boot du chip :
+
+- **`D8` (GPIO15) doit être actif à l'état haut.** Il a un pull-down interne et
+  le chip refuse de démarrer si GPIO15 est haut au reset. Câbler la LED rouge
+  dans l'autre sens (`3V3 → LED → D8`) bloque le boot jusqu'à ce que vous la
+  débranchiez.
+- **`D3` (GPIO0) doit être actif à l'état bas** : `3V3 → buzzer → D3`, et on
+  tire la broche à LOW pour l'activer. Une charge vers GND sur GPIO0 le tire bas
+  au reset et la carte démarre en mode flash au lieu de lancer votre programme.
+
+`D5`, `D0` et `D8` ont été choisis pour que **les 3 LEDs soient toutes actives à
+l'état haut**, donc toutes câblées pareil. `D5` était la broche prévue pour le
+joystick, qui n'a jamais été câblé.
+
+#### Pont diviseur du MQ
+
+La sortie `AO` monte jusqu'à 5 V, et aucune broche de l'ESP8266 ne tolère plus
+de 3,3 V :
+
+```
+MQ AO ──[ 68k ]──┬──[ 68k ]── GND
+                 │
+                A0
+```
+
+Deux résistances **identiques** : `A0` voit la moitié de la tension. Le firmware
+remultiplie par `GAS_DIVIDER_RATIO` pour afficher la vraie tension du capteur.
+
+---
+
+## Choses qui coûtent une après-midi à découvrir
+
+Toutes vérifiées sur le matériel.
+
+- **Alimenter le rail 5 V depuis `VU`, pas `VIN`.** Sur la LoLin V3, `VIN` est
+  une *entrée* du régulateur, pas une sortie : il mesure 0 V quand la carte est
+  alimentée par USB.
+- **Le 3,3 V est un îlot de trous isolé, jamais un rail.** C'est volontaire :
+  il ne peut pas toucher le rail 5 V.
+- **L'ADC de l'ESP8266 est en 10 bits : `0-1023`.** Pas 4095. Les seuils de
+  l'ancien dashboard ESP32 ne déclenchaient jamais à cause de ça.
+- **Le capteur vendu comme MPU-9250 est un MPU-6500.** `WHO_AM_I` (`0x75`)
+  renvoie `0x70`. Pas de magnétomètre : tangage et roulis OK, cap impossible.
+  `imu.h` attaque les registres directement, parce que les bibliothèques
+  MPU9250 exigent `0x71` et refusent de s'initialiser sur `0x70`.
+- **L'I2C doit tourner à 100 kHz.** `Wire.setClock(400000)` et le MPU ne répond
+  plus du tout : l'ESP8266 fait l'I2C en logiciel.
+- **Une entrée ESP8266 en l'air lit un `1` stable**, indiscernable d'un capteur
+  déclenché en permanence. Le vrai défaut du PIR était `VCC`/`GND` inversés : le
+  module n'a aucune sérigraphie et `OUT` est la broche **du milieu**.
+- **La valeur de gaz n'est pas des ppm.** Sans calibrer `R0` à l'air libre (et
+  24-48 h de rodage pour un capteur neuf), aucune valeur absolue n'a de sens. Le
+  firmware publie les volts et surtout **l'écart par rapport à une baseline**
+  mesurée après 3 min de chauffe. C'est le seul signal honnête.
+
+---
 
 ## Installation
 
-### Prérequis
-
-1. Installer [PlatformIO](https://platformio.org/)
-2. Installer VS Code avec l'extension PlatformIO (recommandé)
-
-### Configuration
-
-Modifier `include/config.h` :
-
-```cpp
-#define WIFI_SSID "your_wifi"
-#define WIFI_PASSWORD "your_wifi_password"
-
-#define MQTT_HOST "192.168.1.50"
-#define GROUP_ID "g02"
+```sh
+cp include/secrets.example.h include/secrets.h
+$EDITOR include/secrets.h          # SSID, mots de passe, ca.crt
+cd firmware && pio run -t upload
+pio device monitor                 # 115200
 ```
 
-### Sélection de l'environnement
+Le bandeau de boot de la ROM sort à 74880 bauds et ressemble à du bruit à
+115200. C'est normal ; votre programme parle juste après.
 
-Le firmware prend en charge deux environnements :
+### Environnements de compilation
 
-**Test/Développement (par défaut)** :
-- Port MQTT : 1883 (MQTT non chiffré)
-- TLS : Désactivé
-- Authentification : Désactivée
-- Compilation avec : `pio run -e esp32dev`
+| Environnement | Pour quoi |
+|---|---|
+| `pio run -e nodemcuv2` | tout activé : capteurs, LEDs, dashboard, présence, MQTT+TLS |
+| `pio run -e nodemcuv2_standalone` | aucun broker, aucun TLS, aucun Docker. Capteurs + LEDs + dashboard local |
+| `pio run -e nodemcuv2_lowheap` | garde MQTT+TLS, coupe le sniffer et l'IMU. À essayer si la carte redémarre au hasard |
 
-**Production** :
-- Port MQTT : 8883 (MQTTS)
-- TLS : Activé
-- Authentification : Activée
-- Compilation avec : `pio run -e esp32dev_prod`
+---
 
-Pour changer d'environnement, utilisez l'environnement approprié dans `platformio.ini` ou spécifiez-le lors de la compilation.
+## Les 3 LEDs
 
-### Compilation et téléversement
+| LED | État | Déclencheurs |
+|---|---|---|
+| 🟢 verte **fixe** | *validation* | tous les capteurs répondent, rien détecté |
+| 🟢 verte **qui clignote** | dégradé | ça tourne, mais un capteur ne répond pas |
+| 🟡 jaune | *pré-alerte* | score de présence WiFi ≥ `PRESENCE_WARN_SCORE`, gaz ≥ `GAS_WARN_DELTA_V`, ou boîtier incliné |
+| 🔴 rouge (clignotement rapide) | *intrusion* | mouvement PIR confirmé, gaz ≥ `GAS_CRIT_DELTA_V`, ou présence ≥ `PRESENCE_CRIT_SCORE` |
 
-Avec l'interface en ligne de commande de PlatformIO :
+Jaune et rouge sont maintenues `WARNING_HOLD_MS` / `INTRUDER_HOLD_MS` après le
+dernier déclenchement, pour qu'un passage d'une fraction de seconde reste
+visible. Au démarrage, les 3 LEDs s'allument l'une après l'autre : une LED qui
+ne s'allume pas à ce moment-là est mal câblée, pas inactive.
 
-```bash
-cd firmware
-pio run
-pio run --target upload
-pio device monitor
-```
+---
 
-Vous pouvez également utiliser les boutons de l'extension PlatformIO dans VS Code.
+## Détection d'appareils WiFi
+
+Deux signaux indépendants, volontairement comptés séparément :
+
+| Signal | Ce que c'est | Fiabilité |
+|---|---|---|
+| **associés** | appareils connectés au point d'accès du boîtier | exact et continu |
+| **sniffés** | téléphones qui ne nous parlent pas du tout, vus via leurs *probe requests* en mode promiscuous | c'est le signal « à travers les murs » |
+
+`score = associés × PRESENCE_ASSOC_WEIGHT + sniffés × PRESENCE_SNIFF_WEIGHT`
+
+### Trois limites à connaître avant de régler les seuils
+
+1. **L'ESP8266 ne peut pas sniffer et héberger le point d'accès en même temps.**
+   Le mode promiscuous exige d'être en station seule, donc chaque fenêtre de
+   sniff **coupe le point d'accès** : les clients du dashboard sont éjectés et
+   le lien MQTT tombe le temps de la fenêtre. D'où `SNIFF_WINDOW_MS` court
+   (3 s) et `SNIFF_PERIOD_MS` long (60 s). Le dashboard affiche le compte à
+   rebours ; quelques requêtes ratées à ce moment-là sont normales.
+2. **Les téléphones randomisent leur adresse MAC** (iOS 8+, Android 10+). Un
+   seul téléphone peut émettre une dizaine d'adresses en une minute. Le compte
+   de MAC uniques est donc un **niveau d'activité, pas un décompte de
+   personnes**. Le firmware sépare `randomized` et `stable` exprès, pour que le
+   chiffre puisse être lu honnêtement.
+3. **Un radio ne mesure pas une distance.** Le RSSI y est vaguement corrélé et
+   massacré par les murs, les corps et l'orientation. `SNIFF_MIN_RSSI` est un
+   réglage de rayon grossier, pas une distance en mètres.
+
+Le sniffer capture des identifiants diffusés en clair. C'est sans problème sur
+votre propre banc ; réfléchissez avant de le pointer vers une salle publique.
+`PRESENCE_SNIFFER 0` ne garde que le comptage des clients associés, sans jamais
+couper le point d'accès.
+
+---
+
+## Réseau
+
+Le boîtier est en **AP + station** simultanément :
+
+| | |
+|---|---|
+| Point d'accès hébergé | `AP_SSID` de `secrets.h` (défaut `Sentinel-X`) |
+| Dashboard embarqué | `http://192.168.4.1/` ou `http://sentinel-x.local/` |
+| API JSON embarquée | `http://192.168.4.1/api/readings` |
+| Réseau rejoint | `WIFI_SSID` de `secrets.h`, pour atteindre le broker |
+
+Les deux radios partagent un seul canal (celui de la station gagne) : c'est
+normal.
+
+`WiFi.begin()` **ne sait pas rejoindre un réseau WPA2-Enterprise**
+(802.1X/PEAP), ce qu'est la plupart des WiFi de campus. Il faut du WPA2-PSK :
+le hotspot du PC serveur, ou un partage de connexion.
+
+**Le dashboard embarqué n'a aucune dépendance externe, et ça doit rester le
+cas.** Les clients du point d'accès n'ont pas d'accès Internet : une police ou
+un script sur CDN ne se dégrade pas, il fait attendre le chargement de la page
+jusqu'au timeout du navigateur.
+
+Le gros dashboard de supervision avec le flux webcam est un autre programme :
+`../dashboard`, servi par nginx depuis le PC serveur. **La caméra est une
+webcam USB branchée sur le PC**, elle ne touche jamais l'ESP8266.
+
+---
 
 ## Topics MQTT
 
+Les noms sont imposés par `../mosquitto/config/acl`. Le compte MQTT s'appelle
+toujours `esp32` pour que l'ACL et le `.env` du serveur restent valables, même
+si la carte est un ESP8266.
+
 ### Publication
 
-- **Télémétrie** : `sentinelx/{GROUP_ID}/telemetry`
-  - Charge utile : `{"t":24.1,"h":48,"gaz":312,"pir":0}`
-  - Publiée toutes les 2 secondes
+- **`sentinelx/g02/telemetry`** toutes les `TELEMETRY_INTERVAL_MS`
 
-- **Alertes** : `sentinelx/{GROUP_ID}/alerts`
-  - Charge utile : `{"type":"gaz","niveau":"critique"}`
-  - Publiées lorsque le seuil de gaz est dépassé
+  ```json
+  {"t":24.1,"h":48,"gaz":312,"pir":0,"rssi":-62,
+   "gaz_v":1.98,"gaz_d":0.12,
+   "pres":4,"assoc":1,"sniff":3,
+   "tilt":0,"state":"green","heap":14200}
+  ```
 
-- **Statut** : `sentinelx/{GROUP_ID}/status`
-  - Charge utile : `online` ou `offline`
-  - Publié lors de la connexion/déconnexion
+  `gaz` est l'ADC brut, **0-1023**. `t` et `h` valent `null` quand le DHT22 n'a
+  pas donné de lecture valable — exprès, pour qu'un capteur mort ne fasse pas
+  jeter les données de gaz et de mouvement avec lui.
+
+- **`sentinelx/g02/alerts`** — `type` ∈ `gaz`, `mouvement`, `sabotage`,
+  `presence` ; `niveau` ∈ `attention`, `critique`. Une alerte par type au plus
+  toutes les `ALERT_COOLDOWN_MS`.
+
+- **`sentinelx/g02/status`** — `online` / `offline`, en retained. Le `offline`
+  est un *Last Will* : c'est le broker qui le publie si le boîtier disparaît.
 
 ### Abonnement
 
-- **Commandes** : `sentinelx/{GROUP_ID}/cmd`
-  - Charge utile : `{"buzzer":1,"led":"rouge"}`
-  - `buzzer` : 0 ou 1
-  - `led` : `"rouge"`, `"jaune"`, `"blanc"` ou `"eteint"`
+- **`sentinelx/g02/cmd`**
+  - `{"buzzer":1}`
+  - `{"led":"rouge"}` — aussi `vert`, `jaune`, `blanc`, `eteint`. Prend la main
+    sur les LEDs pendant `LED_OVERRIDE_MS` puis **rend automatiquement le
+    contrôle** à la machine à états : une commande de test oubliée ne doit pas
+    laisser le boîtier mentir indéfiniment sur ce qu'il voit.
+  - `{"auto":1}` — rend la main tout de suite.
 
-## Calibration
+---
 
-### Capteur de gaz MQ-2
+## TLS sur ESP8266 : les deux vrais problèmes
 
-Le MQ-2 nécessite une période de préchauffage de 1 à 2 minutes avant de fournir des mesures stables. Ajustez la valeur `GAS_ALERT_THRESHOLD` dans `config.h` en fonction de votre environnement.
+`MQTT_USE_TLS 1` est le défaut, mais lisez ça avant le jour J.
 
-### DHT22
+1. **La RAM.** BearSSL veut un tampon de réception de 16 ko si le broker ne
+   négocie pas MFLN — et Mosquitto (OpenSSL) ne le fait pas. Ça fait ~22 ko sur
+   un tas d'environ 40 ko, en plus du serveur web et de la table de présence. Le
+   firmware teste MFLN au démarrage et le dit sur le port série. **Surveillez
+   `heap` sur le dashboard** : sous ~8 ko, attendez-vous à des redémarrages
+   aléatoires. La sortie de secours est `MQTT_USE_TLS 0` (port 1883) ou
+   l'environnement `nodemcuv2_lowheap`.
 
-Les mesures doivent être effectuées au maximum une fois toutes les 2 secondes. Le firmware respecte cette limitation.
+2. **L'horloge.** La validation X.509 vérifie `notBefore`/`notAfter`. La carte
+   n'a pas d'horloge temps réel, et un point d'accès isolé n'a pas de NTP. Le
+   firmware amorce donc l'horloge avec `BUILD_EPOCH` de `config.h`. Si les
+   certificats commencent à être vus comme « pas encore valides » ou
+   « expirés », c'est cette constante qu'il faut bouger.
+
+---
 
 ## Dépannage
 
-### Problèmes de connexion WiFi
+| Symptôme | Cause |
+|---|---|
+| la carte ne démarre pas, ou démarre en mode flash | LED rouge câblée à l'envers sur `D8`, ou charge vers GND sur `D3`. Voir « les deux pièges » |
+| reste sur `[sta] joining ...` | point d'accès en 5 GHz, ou réseau WPA2-Enterprise, ou SSID/mot de passe faux |
+| `state=-2` + erreur TLS | mauvaise IP, port 8883 bloqué par le pare-feu Windows, `ca.crt` mal collé, dates du certificat contre `BUILD_EPOCH`, ou plus assez de tas |
+| `state=4` ou `5` | utilisateur/mot de passe MQTT faux, ou mauvais groupe dans l'ACL |
+| `"t":null` en permanence | DHT22 : `DATA` sur `D2`, `VCC` sur l'îlot 3,3 V |
+| `gaz` bloqué à 0 ou 1023 | pont diviseur absent ou mal câblé |
+| PIR toujours à `1` | `VCC`/`GND` inversés (`OUT` = broche du milieu), ou broche en l'air |
+| `imu : not responding` | `SDA`/`SCL` inversés entre `D6` et `D7`, ou I2C poussé à 400 kHz |
+| redémarrages aléatoires | tas épuisé. `nodemcuv2_lowheap`, ou `MQTT_USE_TLS 0` |
+| le dashboard se déconnecte toutes les minutes | **normal** : c'est la fenêtre de sniff. Allonger `SNIFF_PERIOD_MS` ou `PRESENCE_SNIFFER 0` |
 
-- Vérifiez le SSID et le mot de passe dans `config.h`
-- Assurez-vous que l'ESP32 se trouve à portée de votre routeur WiFi
-- Consultez le moniteur série (115200 bauds) pour identifier les messages d'erreur
-
-### Problèmes de connexion MQTT
-
-- Vérifiez l'adresse et le port du broker MQTT
-- Vérifiez si le broker nécessite une authentification
-- Assurez-vous que le broker est en cours d'exécution et accessible
-
-### Mesures des capteurs
-
-- **DHT22** : si les mesures retournent `NaN`, vérifiez le câblage et essayez un autre GPIO
-- **MQ-2** : si les valeurs sont toujours `0` ou `4095`, vérifiez l'alimentation et le diviseur de tension
-- **PIR** : utilisez les potentiomètres intégrés pour régler la sensibilité et le délai
-
-## Intégration avec l'API
-
-Ce firmware est conçu pour fonctionner avec l'API Python Sentinel-X située dans le répertoire `../api`. L'API attend les données de télémétrie au format envoyé par ce firmware.
+---
 
 ## Licence
 
 Projet pédagogique réalisé dans le cadre du Workshop Sentinel-X d'EPSI.
-=======
-# Firmware ESP32 — boîtier Sentinel-X
-
-## Câblage
-
-| Composant | Broche du module | → ESP32 | Remarque |
-|---|---|---|---|
-| **DHT22** | VCC / DATA / GND | 3V3 / **GPIO 4** / GND | |
-| **MQ-2** | VCC / GND | **VIN (5 V)** / GND | le MQ-2 a besoin de 5 V pour chauffer |
-| **MQ-2** | AO | **GPIO 34** *via pont diviseur* | voir ci-dessous, ne jamais brancher AO en direct |
-| **PIR HC-SR501** | VCC / OUT / GND | **VIN (5 V)** / **GPIO 27** / GND | la sortie OUT est en 3,3 V : OK |
-| **Buzzer actif** | S (I/O) / VCC / GND | **GPIO 26** / 3V3 / GND | |
-| **LED rouge** | patte longue (+) | **GPIO 25** via résistance ~220 Ω | patte courte → GND |
-| **LED jaune** | patte longue (+) | **GPIO 33** via résistance ~220 Ω | patte courte → GND |
-| OLED (option) | SDA / SCL / VCC / GND | GPIO 21 / GPIO 22 / 3V3 / GND | mettre `USE_OLED 1` |
-
-**Pont diviseur du MQ-2** (la sortie AO monte jusqu'à 5 V, l'ESP32 accepte 3,3 V max) :
-
-```
-MQ-2 AO ──[ R1 ]──┬──[ R2 ]── GND
-                  │
-               GPIO 34
-```
-Avec **deux résistances identiques** (par ex. 2 × 68 kΩ de la bande), GPIO 34 reçoit au plus 2,5 V.
-
-## Installation (Arduino IDE)
-1. **Fichier → Préférences → URL de gestionnaire de cartes** : `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
-2. **Outils → Carte → Gestionnaire de cartes** : installer **esp32 by Espressif** (version **3.1 ou plus**).
-3. **Outils → Gérer les bibliothèques** : installer **PubSubClient**, **DHT sensor library** (+ Adafruit Unified Sensor), **ArduinoJson** (v7).
-4. **Outils → Carte** : *ESP32 Dev Module*. **Outils → Port** : le port COM de la carte.
-
-## Configuration
-1. Copier `secrets.example.h` en **`secrets.h`** (même dossier).
-2. Remplir : SSID/mot de passe du point d'accès, IP du PC serveur, mot de passe MQTT `esp32` (= `MQTT_ESP32_PASSWORD` du `.env`).
-3. Coller le contenu complet de `certs/ca.crt` entre les lignes `R"EOF(` et `)EOF"`.
-
-## Téléverser et vérifier
-Téléverser (→), puis **Moniteur série à 115200 bauds**. Attendu :
-```
-[WiFi] connexion à SENTINELX-G02...
-[MQTT] connexion TLS à 192.168.137.1:8883...
-[MQTT] connecté
-[TX] {"t":23.4,"h":45,"gaz":512,"pir":0,...}
-```
-
-## Dépannage
-| Message | Cause |
-|---|---|
-| reste sur `[WiFi] connexion...` | point d'accès en 5 GHz (l'ESP32 ne voit que le **2,4 GHz**), SSID ou mot de passe faux |
-| `état=-2` + erreur TLS | IP du serveur absente du certificat, `ca.crt` mal collé, ou port 8883 bloqué par le pare-feu Windows |
-| `état=4` ou `5` | utilisateur/mot de passe MQTT faux, ou mauvais groupe dans l'ACL |
-| `"t":null` | DHT22 mal branché (vérifier DATA sur GPIO 4) |
-| `gaz` bloqué à 0 ou 4095 | pont diviseur absent ou mal câblé |
->>>>>>> 0be6474 (modif dossier)
