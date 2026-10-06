@@ -1,8 +1,7 @@
 # Sentinel-X — stack serveur (PC Serveur Local, option B)
-# Réseau interne sentinel_net 172.28.0.0/24 (voir schéma réseau)
+# Réseau interne sentinel_net 172.20.0.0/24 (voir schéma réseau)
 #
-#   docker compose up -d                 -> mosquitto + db + nginx
-#   docker compose --profile full up -d  -> + api (quand les DEV l'ont livrée dans ./api)
+#   docker compose up -d --build   -> mosquitto + db + api + nginx
 
 x-logging: &logging           # MCO : rotation des logs Docker (max 3 x 10 Mo par conteneur)
   driver: json-file
@@ -26,23 +25,12 @@ services:
       - "8883:8883"             # MQTTS chiffré : ouvert au Wi-Fi de table (ESP32)
       - "127.0.0.1:1883:1883"   # MQTT clair : uniquement depuis le PC lui-même (tests)
     volumes:
-      - ./mosquitto/config:/mosquitto/config-src:ro   # config du dépôt (lecture seule)
-      - ./certs:/mosquitto/certs-src:ro               # certificats (lecture seule)
+      - ./mosquitto/config:/mosquitto/config
+      - ./certs:/mosquitto/certs
       - mosquitto_data:/mosquitto/data
-    # Copie config + certs dans le conteneur avec les bons droits (corrige les droits sous Windows)
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        mkdir -p /mosquitto/config /mosquitto/certs
-        cp /mosquitto/config-src/* /mosquitto/config/
-        cp /mosquitto/certs-src/ca.crt /mosquitto/certs-src/server.crt /mosquitto/certs-src/server.key /mosquitto/certs/
-        chown -R mosquitto:mosquitto /mosquitto/config /mosquitto/certs /mosquitto/data
-        chmod 600 /mosquitto/config/passwd /mosquitto/config/acl /mosquitto/certs/server.key
-        exec mosquitto -c /mosquitto/config/mosquitto.conf
     networks:
       sentinel_net:
-        ipv4_address: 172.28.0.10
+        ipv4_address: 172.20.0.10
     deploy:
       resources:
         limits:
@@ -60,7 +48,7 @@ services:
       - db_data:/var/lib/postgresql/data
     networks:
       sentinel_net:
-        ipv4_address: 172.28.0.30
+        ipv4_address: 172.20.0.30
     # Aucun port publié : la base n'est joignable que depuis le réseau Docker
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
@@ -74,8 +62,7 @@ services:
 
   api:
     <<: *hardening
-    profiles: ["full"]          # démarre seulement avec --profile full
-    build: ./api                # code fourni par les DEV (doit écouter sur le port 8000)
+    build: ./api                # API FastAPI (port 8000, interne)
     container_name: sentinelx-api
     user: "1000:1000"           # pas de root dans le conteneur
     environment:
@@ -84,6 +71,8 @@ services:
       MQTT_PORT: 1883
       MQTT_USER: api
       MQTT_PASSWORD: ${MQTT_API_PASSWORD}
+      API_KEY: ${API_KEY}
+      GROUP_ID: g02
     depends_on:
       db:
         condition: service_healthy
@@ -91,8 +80,12 @@ services:
         condition: service_started
     networks:
       sentinel_net:
-        ipv4_address: 172.28.0.20
+        ipv4_address: 172.20.0.20
     # Aucun port publié : on passe par nginx (/api/)
+    deploy:
+      resources:
+        limits:
+          memory: 192M
 
   nginx:
     <<: *hardening
@@ -104,9 +97,14 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./certs:/etc/nginx/certs:ro
       - ./dashboard:/usr/share/nginx/html:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # accès au flux webcam du script IA (sur le PC)
+    depends_on:
+      - mosquitto
+      - api
     networks:
       sentinel_net:
-        ipv4_address: 172.28.0.40
+        ipv4_address: 172.20.0.40
     deploy:
       resources:
         limits:
@@ -118,7 +116,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.28.0.0/24
+        - subnet: 172.20.0.0/24
 
 volumes:
   mosquitto_data:

@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-# Génère une autorité de certification (CA) et le certificat du serveur 192.168.10.1
-# Usage : ./scripts/gen-certs.sh
+# Génère une autorité de certification (CA) et le certificat du serveur
+# Usage : bash scripts/gen-certs.sh
+# IP du serveur incluses par défaut : 192.168.137.1 (point d'accès Windows) et 192.168.10.1
+#   autre IP : SERVER_IPS="192.168.x.y" bash scripts/gen-certs.sh
 set -euo pipefail
 cd "$(dirname "$0")/../certs"
 
-SERVER_IP="${SERVER_IP:-192.168.10.1}"
+SERVER_IPS="${SERVER_IPS:-192.168.137.1 192.168.10.1}"
+FIRST_IP="${SERVER_IPS%% *}"
+SAN=""
+for ip in $SERVER_IPS; do SAN="${SAN}IP:${ip}, "; done
 
 if [ -f ca.key ]; then
-  echo "Des certificats existent déjà dans certs/. Supprime-les pour regénérer."
+  echo "Des certificats existent déjà dans certs/. Pour regénérer : rm certs/*.crt certs/*.key"
   exit 1
 fi
 
@@ -19,11 +24,11 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
 # 2. Clé + demande du serveur
 openssl req -newkey rsa:2048 -nodes \
   -keyout server.key -out server.csr \
-  -subj "/C=FR/O=Sentinel-X/CN=${SERVER_IP}"
+  -subj "/C=FR/O=Sentinel-X/CN=${FIRST_IP}"
 
 # 3. Signature avec les adresses du serveur (SAN), obligatoire pour l'ESP32 et les navigateurs
 cat > server.ext <<EOF
-subjectAltName = IP:${SERVER_IP}, IP:127.0.0.1, DNS:sentinelx.local, DNS:localhost, DNS:mosquitto
+subjectAltName = ${SAN}IP:127.0.0.1, DNS:sentinelx.local, DNS:localhost, DNS:mosquitto
 extendedKeyUsage = serverAuth
 EOF
 openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \

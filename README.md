@@ -5,10 +5,10 @@ Adresses conformes au schéma réseau : LAN de table `192.168.10.0/24`, serveur 
 
 | Conteneur | IP interne | Port exposé sur le PC |
 |---|---|---|
-| mosquitto | 172.28.0.10 | `8883` (TLS, Wi-Fi de table) · `1883` (clair, **127.0.0.1 seulement**) |
-| api | 172.28.0.20 | aucun (via nginx `/api/`) |
-| db | 172.28.0.30 | aucun |
-| nginx | 172.28.0.40 | `443` (HTTPS) |
+| mosquitto | 172.20.0.10 | `8883` (TLS, Wi-Fi de table) · `1883` (clair, **127.0.0.1 seulement**) |
+| api | 172.20.0.20 | aucun (via nginx `/api/`) |
+| db | 172.20.0.30 | aucun |
+| nginx | 172.20.0.40 | `443` (HTTPS) |
 
 ## Prérequis
 - Docker + Docker Compose (Docker Desktop sous Windows)

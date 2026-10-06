@@ -15,6 +15,7 @@ topic write sentinelx/g02/alerts
 user api
 topic read  sentinelx/g02/#
 topic write sentinelx/g02/cmd
+topic write sentinelx/g02/alerts  
 
 # Dashboard web : lit tout le projet, envoie les commandes
 user dashboard

@@ -74,7 +74,7 @@ MQTT_CA_CERT = os.getenv(
 
 GROUP_ID = os.getenv(
     "GROUP_ID",
-    "g01",
+    "g02",
 )
 
 
