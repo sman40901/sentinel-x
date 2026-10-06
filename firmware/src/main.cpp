@@ -217,6 +217,7 @@ void publishTelemetry() {
     publishAlert("gaz", "critique", "Seuil gaz MQ-2 depasse");
   }
 }
+}
 
 // =========================================================
 // Initialisation

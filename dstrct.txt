@@ -1,0 +1,286 @@
+ Volume in drive C is Windows
+ Volume Serial Number is A6E5-6F48
+
+ Directory of C:\sentinel-x
+
+10/06/2026  10:30 AM    <DIR>          .
+10/06/2026  10:24 AM               458 .env.example
+10/06/2026  10:24 AM               160 .gitignore
+10/06/2026  10:24 AM    <DIR>          api
+10/06/2026  10:24 AM    <DIR>          certs
+10/06/2026  10:24 AM    <DIR>          dashboard
+10/06/2026  10:24 AM             4,085 docker-compose.yml
+10/06/2026  10:30 AM                 0 dstrct.txt
+10/06/2026  10:24 AM    <DIR>          firmware
+10/06/2026  10:24 AM    <DIR>          mosquitto
+10/06/2026  10:24 AM    <DIR>          nginx
+10/06/2026  10:24 AM             3,911 README.md
+10/06/2026  10:24 AM    <DIR>          scripts
+               5 File(s)          8,614 bytes
+
+ Directory of C:\sentinel-x\.git
+
+10/06/2026  10:30 AM    <DIR>          ..
+10/06/2026  10:25 AM               389 config
+10/06/2026  10:24 AM                73 description
+10/06/2026  10:27 AM               443 FETCH_HEAD
+10/06/2026  10:30 AM                26 HEAD
+10/06/2026  10:24 AM    <DIR>          hooks
+10/06/2026  10:30 AM             3,930 index
+10/06/2026  10:24 AM    <DIR>          info
+10/06/2026  10:24 AM    <DIR>          logs
+10/06/2026  10:27 AM    <DIR>          objects
+10/06/2026  10:24 AM                41 ORIG_HEAD
+10/06/2026  10:24 AM               318 packed-refs
+10/06/2026  10:24 AM    <DIR>          refs
+               7 File(s)          5,220 bytes
+
+ Directory of C:\sentinel-x\.git\hooks
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM               478 applypatch-msg.sample
+10/06/2026  10:24 AM               896 commit-msg.sample
+10/06/2026  10:24 AM             4,726 fsmonitor-watchman.sample
+10/06/2026  10:24 AM               189 post-update.sample
+10/06/2026  10:24 AM               424 pre-applypatch.sample
+10/06/2026  10:24 AM             1,649 pre-commit.sample
+10/06/2026  10:24 AM               416 pre-merge-commit.sample
+10/06/2026  10:24 AM             1,374 pre-push.sample
+10/06/2026  10:24 AM             4,898 pre-rebase.sample
+10/06/2026  10:24 AM               544 pre-receive.sample
+10/06/2026  10:24 AM             1,492 prepare-commit-msg.sample
+10/06/2026  10:24 AM             2,783 push-to-checkout.sample
+10/06/2026  10:24 AM             2,308 sendemail-validate.sample
+10/06/2026  10:24 AM             3,650 update.sample
+              14 File(s)         25,827 bytes
+
+ Directory of C:\sentinel-x\.git\info
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM               240 exclude
+               1 File(s)            240 bytes
+
+ Directory of C:\sentinel-x\.git\logs
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:30 AM               696 HEAD
+10/06/2026  10:24 AM    <DIR>          refs
+               1 File(s)            696 bytes
+
+ Directory of C:\sentinel-x\.git\logs\refs
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:25 AM    <DIR>          heads
+10/06/2026  10:24 AM    <DIR>          remotes
+               0 File(s)              0 bytes
+
+ Directory of C:\sentinel-x\.git\logs\refs\heads
+
+10/06/2026  10:25 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:25 AM               156 dashboard
+10/06/2026  10:24 AM               186 main
+               2 File(s)            342 bytes
+
+ Directory of C:\sentinel-x\.git\logs\refs\remotes
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM    <DIR>          origin
+               0 File(s)              0 bytes
+
+ Directory of C:\sentinel-x\.git\logs\refs\remotes\origin
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM               186 HEAD
+               1 File(s)            186 bytes
+
+ Directory of C:\sentinel-x\.git\objects
+
+10/06/2026  10:27 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          info
+10/06/2026  10:24 AM    <DIR>          pack
+               0 File(s)              0 bytes
+
+ Directory of C:\sentinel-x\.git\objects\info
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:27 AM    <DIR>          ..
+               0 File(s)              0 bytes
+
+ Directory of C:\sentinel-x\.git\objects\pack
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:27 AM    <DIR>          ..
+10/06/2026  10:24 AM             6,392 pack-6ba2bd380edfd0fcf6cefdf0abd28f4c8ab4611e.idx
+10/06/2026  10:24 AM            88,254 pack-6ba2bd380edfd0fcf6cefdf0abd28f4c8ab4611e.pack
+10/06/2026  10:24 AM               812 pack-6ba2bd380edfd0fcf6cefdf0abd28f4c8ab4611e.rev
+               3 File(s)         95,458 bytes
+
+ Directory of C:\sentinel-x\.git\refs
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:25 AM    <DIR>          heads
+10/06/2026  10:24 AM    <DIR>          remotes
+10/06/2026  10:24 AM    <DIR>          tags
+               0 File(s)              0 bytes
+
+ Directory of C:\sentinel-x\.git\refs\heads
+
+10/06/2026  10:25 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:25 AM                41 dashboard
+10/06/2026  10:24 AM                41 main
+               2 File(s)             82 bytes
+
+ Directory of C:\sentinel-x\.git\refs\remotes
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM    <DIR>          origin
+               0 File(s)              0 bytes
+
+ Directory of C:\sentinel-x\.git\refs\remotes\origin
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM                30 HEAD
+               1 File(s)             30 bytes
+
+ Directory of C:\sentinel-x\.git\refs\tags
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+               0 File(s)              0 bytes
+
+ Directory of C:\sentinel-x\api
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:30 AM    <DIR>          ..
+10/06/2026  10:24 AM               402 .env.example
+10/06/2026  10:24 AM               516 Dockerfile
+10/06/2026  10:24 AM             9,225 main.py
+10/06/2026  10:24 AM             7,631 MANUAL_MQTT_TESTING.md
+10/06/2026  10:24 AM               288 pytest.ini
+10/06/2026  10:24 AM               105 requirement.txt
+10/06/2026  10:24 AM                89 requirements.txt
+10/06/2026  10:24 AM             2,322 SETUP.md
+10/06/2026  10:24 AM    <DIR>          src
+10/06/2026  10:24 AM    <DIR>          tests
+               8 File(s)         20,578 bytes
+
+ Directory of C:\sentinel-x\api\src
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM             1,848 main.py
+10/06/2026  10:24 AM    <DIR>          mqtt
+10/06/2026  10:24 AM                33 __init__.py
+               2 File(s)          1,881 bytes
+
+ Directory of C:\sentinel-x\api\src\mqtt
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM             7,463 client.py
+10/06/2026  10:24 AM             3,801 handlers.py
+10/06/2026  10:24 AM             1,700 publisher.py
+10/06/2026  10:24 AM                25 __init__.py
+               4 File(s)         12,989 bytes
+
+ Directory of C:\sentinel-x\api\tests
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM             2,616 README.md
+10/06/2026  10:24 AM             9,163 test_mqtt_client.py
+10/06/2026  10:24 AM             5,872 test_mqtt_handlers.py
+10/06/2026  10:24 AM             5,175 test_mqtt_publisher.py
+10/06/2026  10:24 AM                24 __init__.py
+               5 File(s)         22,850 bytes
+
+ Directory of C:\sentinel-x\certs
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:30 AM    <DIR>          ..
+10/06/2026  10:24 AM                 0 .gitkeep
+               1 File(s)              0 bytes
+
+ Directory of C:\sentinel-x\dashboard
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:30 AM    <DIR>          ..
+10/06/2026  10:24 AM            19,731 app.js
+10/06/2026  10:24 AM             4,556 index.html
+10/06/2026  10:24 AM             6,452 style.css
+               3 File(s)         30,739 bytes
+
+ Directory of C:\sentinel-x\firmware
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:30 AM    <DIR>          ..
+10/06/2026  10:24 AM               163 .gitignore
+10/06/2026  10:24 AM    <DIR>          include
+10/06/2026  10:24 AM               459 platformio.ini
+10/06/2026  10:24 AM             7,456 README.md
+10/06/2026  10:24 AM    <DIR>          sentinelx_esp32
+10/06/2026  10:24 AM    <DIR>          src
+               3 File(s)          8,078 bytes
+
+ Directory of C:\sentinel-x\firmware\include
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM             2,334 config.h
+               1 File(s)          2,334 bytes
+
+ Directory of C:\sentinel-x\firmware\sentinelx_esp32
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM             1,050 secrets.example.h
+10/06/2026  10:24 AM            10,503 sentinelx_esp32.ino
+               2 File(s)         11,553 bytes
+
+ Directory of C:\sentinel-x\firmware\src
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:30 AM             7,492 main.cpp
+               1 File(s)          7,492 bytes
+
+ Directory of C:\sentinel-x\mosquitto
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:30 AM    <DIR>          ..
+10/06/2026  10:24 AM    <DIR>          config
+               0 File(s)              0 bytes
+
+ Directory of C:\sentinel-x\mosquitto\config
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:24 AM    <DIR>          ..
+10/06/2026  10:24 AM               771 acl
+10/06/2026  10:24 AM             1,074 mosquitto.conf
+               2 File(s)          1,845 bytes
+
+ Directory of C:\sentinel-x\nginx
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:30 AM    <DIR>          ..
+10/06/2026  10:24 AM             2,302 default.conf
+               1 File(s)          2,302 bytes
+
+ Directory of C:\sentinel-x\scripts
+
+10/06/2026  10:24 AM    <DIR>          .
+10/06/2026  10:30 AM    <DIR>          ..
+10/06/2026  10:24 AM             1,081 add-mqtt-users.sh
+10/06/2026  10:24 AM             1,913 gen-certs.sh
+               2 File(s)          2,994 bytes
+
+     Total Files Listed:
+              72 File(s)        262,330 bytes
+              84 Dir(s)  24,913,285,120 bytes free
