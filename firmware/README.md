@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Firmware ESP32 Sentinel-X
 
 Firmware pour le système de surveillance IoT Sentinel-X utilisant un ESP32, des capteurs et MQTT.
@@ -150,3 +151,57 @@ Ce firmware est conçu pour fonctionner avec l'API Python Sentinel-X située dan
 ## Licence
 
 Projet pédagogique réalisé dans le cadre du Workshop Sentinel-X d'EPSI.
+=======
+# Firmware ESP32 — boîtier Sentinel-X
+
+## Câblage
+
+| Composant | Broche du module | → ESP32 | Remarque |
+|---|---|---|---|
+| **DHT22** | VCC / DATA / GND | 3V3 / **GPIO 4** / GND | |
+| **MQ-2** | VCC / GND | **VIN (5 V)** / GND | le MQ-2 a besoin de 5 V pour chauffer |
+| **MQ-2** | AO | **GPIO 34** *via pont diviseur* | voir ci-dessous, ne jamais brancher AO en direct |
+| **PIR HC-SR501** | VCC / OUT / GND | **VIN (5 V)** / **GPIO 27** / GND | la sortie OUT est en 3,3 V : OK |
+| **Buzzer actif** | S (I/O) / VCC / GND | **GPIO 26** / 3V3 / GND | |
+| **LED rouge** | patte longue (+) | **GPIO 25** via résistance ~220 Ω | patte courte → GND |
+| **LED jaune** | patte longue (+) | **GPIO 33** via résistance ~220 Ω | patte courte → GND |
+| OLED (option) | SDA / SCL / VCC / GND | GPIO 21 / GPIO 22 / 3V3 / GND | mettre `USE_OLED 1` |
+
+**Pont diviseur du MQ-2** (la sortie AO monte jusqu'à 5 V, l'ESP32 accepte 3,3 V max) :
+
+```
+MQ-2 AO ──[ R1 ]──┬──[ R2 ]── GND
+                  │
+               GPIO 34
+```
+Avec **deux résistances identiques** (par ex. 2 × 68 kΩ de la bande), GPIO 34 reçoit au plus 2,5 V.
+
+## Installation (Arduino IDE)
+1. **Fichier → Préférences → URL de gestionnaire de cartes** : `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
+2. **Outils → Carte → Gestionnaire de cartes** : installer **esp32 by Espressif** (version **3.1 ou plus**).
+3. **Outils → Gérer les bibliothèques** : installer **PubSubClient**, **DHT sensor library** (+ Adafruit Unified Sensor), **ArduinoJson** (v7).
+4. **Outils → Carte** : *ESP32 Dev Module*. **Outils → Port** : le port COM de la carte.
+
+## Configuration
+1. Copier `secrets.example.h` en **`secrets.h`** (même dossier).
+2. Remplir : SSID/mot de passe du point d'accès, IP du PC serveur, mot de passe MQTT `esp32` (= `MQTT_ESP32_PASSWORD` du `.env`).
+3. Coller le contenu complet de `certs/ca.crt` entre les lignes `R"EOF(` et `)EOF"`.
+
+## Téléverser et vérifier
+Téléverser (→), puis **Moniteur série à 115200 bauds**. Attendu :
+```
+[WiFi] connexion à SENTINELX-G02...
+[MQTT] connexion TLS à 192.168.137.1:8883...
+[MQTT] connecté
+[TX] {"t":23.4,"h":45,"gaz":512,"pir":0,...}
+```
+
+## Dépannage
+| Message | Cause |
+|---|---|
+| reste sur `[WiFi] connexion...` | point d'accès en 5 GHz (l'ESP32 ne voit que le **2,4 GHz**), SSID ou mot de passe faux |
+| `état=-2` + erreur TLS | IP du serveur absente du certificat, `ca.crt` mal collé, ou port 8883 bloqué par le pare-feu Windows |
+| `état=4` ou `5` | utilisateur/mot de passe MQTT faux, ou mauvais groupe dans l'ACL |
+| `"t":null` | DHT22 mal branché (vérifier DATA sur GPIO 4) |
+| `gaz` bloqué à 0 ou 4095 | pont diviseur absent ou mal câblé |
+>>>>>>> 0be6474 (modif dossier)

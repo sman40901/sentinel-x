@@ -307,6 +307,29 @@ function startCam() {
 /* ===================== Connexion ===================== */
 function showApp() { $('login').hidden = true; $('app').hidden = false; chartTH.draw(); chartGaz.draw(); startCam(); }
 
+/* Historique : précharge les graphiques et le journal depuis l'API (si elle tourne) */
+async function loadHistory() {
+  try {
+    const [rm, ra] = await Promise.all([fetch('/api/v1/mesures?limit=' + CFG.maxPoints), fetch('/api/v1/alerts?limit=20')]);
+    if (rm.ok) {
+      const rows = await rm.json();
+      rows.forEach((r) => {
+        const lbl = fmtTime(new Date(r.ts));
+        chartTH.push(lbl, [num(r.t), num(r.h)]);
+        chartGaz.push(lbl, [num(r.gaz)]);
+      });
+      if (rows.length) log('info', 'HISTORIQUE', `${rows.length} mesures chargées depuis la base`);
+    }
+    if (ra.ok) {
+      const rows = await ra.json();
+      rows.slice().reverse().forEach((a) => {
+        const k = /crit/.test(a.niveau) ? 'crit' : /att/.test(a.niveau) ? 'warn' : 'info';
+        log(k, String(a.type).toUpperCase(), `${a.msg ?? ''} (${new Date(a.ts).toLocaleString('fr-FR')})`);
+      });
+    }
+  } catch (_) { /* API absente : le dashboard fonctionne quand même en direct */ }
+}
+
 function connect(user, pass) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const url = `${proto}://${location.host}${CFG.wsPath}`;
@@ -321,7 +344,7 @@ function connect(user, pass) {
     state.connected = true; state.client = client;
     client.subscribe(T.all);
     $('brandDot').className = 'dot on';
-    if (firstConnect) { showApp(); log('ok', 'BROKER', `Connecté à ${url} en tant que « ${user} »`); firstConnect = false; }
+    if (firstConnect) { showApp(); loadHistory(); log('ok', 'BROKER', `Connecté à ${url} en tant que « ${user} »`); firstConnect = false; }
     else log('ok', 'BROKER', 'Reconnecté');
   });
   client.on('message', route);

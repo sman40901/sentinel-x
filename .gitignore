@@ -4,3 +4,5 @@ certs/*.key
 certs/*.crt
 !certs/.gitkeep
 mosquitto/config/passwd
+firmware/**/secrets.h
+__pycache__/
