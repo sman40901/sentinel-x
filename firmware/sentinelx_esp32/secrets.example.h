@@ -5,9 +5,9 @@
 #pragma once
 
 #define WIFI_SSID     "SENTINELX-G02"
-#define WIFI_PASSWORD "change-moi-wifi"
+#define WIFI_PASSWORD "WORKSHOP31"
 
-#define MQTT_PASSWORD "change-moi-esp32"   // = MQTT_ESP32_PASSWORD du .env serveur
+#define MQTT_PASSWORD "WORKSHOP31"   // = MQTT_ESP32_PASSWORD du .env serveur
 
 // Contenu complet de certs/ca.crt du serveur
 static const char CA_CERT[] = R"EOF(
