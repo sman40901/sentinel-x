@@ -57,7 +57,7 @@ Modifier `include/config.h` :
 #define WIFI_PASSWORD "your_wifi_password"
 
 #define MQTT_HOST "192.168.1.50"
-#define GROUP_ID "g01"
+#define GROUP_ID "g02"
 ```
 
 ### Sélection de l'environnement

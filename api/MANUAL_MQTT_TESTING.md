@@ -36,7 +36,7 @@ brew install mosquitto
 Open a terminal and subscribe to all Sentinel-X topics:
 
 ```bash
-mosquitto_sub -h localhost -p 1883 -t "sentinelx/g01/#" -v
+mosquitto_sub -h localhost -p 1883 -t "sentinelx/g02/#" -v
 ```
 
 Flags:
@@ -51,29 +51,29 @@ Open another terminal and publish test messages:
 
 **Test telemetry:**
 ```bash
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 312, "pir": 0}'
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 312, "pir": 0}'
 ```
 
 **Test alert:**
 ```bash
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/alerts" -m '{"type": "gaz", "niveau": "critique"}'
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/alerts" -m '{"type": "gaz", "niveau": "critique"}'
 ```
 
 **Test status:**
 ```bash
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/status" -m "online"
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/status" -m "online"
 ```
 
 **Test command:**
 ```bash
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/cmd" -m '{"buzzer": 1, "led": "rouge"}'
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/cmd" -m '{"buzzer": 1, "led": "rouge"}'
 ```
 
 ### 3. Test with authentication (if enabled)
 
 ```bash
-mosquitto_sub -h localhost -p 1883 -t "sentinelx/g01/#" -u esp32 -P your_mqtt_password -v
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 312, "pir": 0}' -u esp32 -P your_mqtt_password
+mosquitto_sub -h localhost -p 1883 -t "sentinelx/g02/#" -u esp32 -P your_mqtt_password -v
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 312, "pir": 0}' -u esp32 -P your_mqtt_password
 ```
 
 ## Option 2: Using MQTT Explorer (GUI)
@@ -118,7 +118,7 @@ import time
 # Configuration
 MQTT_HOST = "localhost"
 MQTT_PORT = 1883
-GROUP_ID = "g01"
+GROUP_ID = "g02"
 
 # Callbacks
 def on_connect(client, userdata, flags, reason_code, properties):
@@ -201,37 +201,37 @@ curl -X POST http://localhost:8000/api/v1/command \
 ### Test 1: Basic Connectivity
 ```bash
 # Terminal 1: Subscribe
-mosquitto_sub -h localhost -p 1883 -t "sentinelx/g01/#" -v
+mosquitto_sub -h localhost -p 1883 -t "sentinelx/g02/#" -v
 
 # Terminal 2: Publish
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/test" -m "Hello MQTT"
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/test" -m "Hello MQTT"
 ```
 
 ### Test 2: Telemetry Format Validation
 ```bash
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 312, "pir": 0}'
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 312, "pir": 0}'
 ```
 
 ### Test 3: Missing Field Handling
 ```bash
 # Missing 'pir' field
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 312}'
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 312}'
 ```
 
 ### Test 4: Invalid JSON
 ```bash
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/telemetry" -m 'invalid json'
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/telemetry" -m 'invalid json'
 ```
 
 ### Test 5: Command with Invalid LED Color
 ```bash
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/cmd" -m '{"buzzer": 1, "led": "purple"}'
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/cmd" -m '{"buzzer": 1, "led": "purple"}'
 ```
 
 ### Test 6: Gas Alert Trigger
 ```bash
 # High gas value to trigger alert
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 500, "pir": 0}'
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/telemetry" -m '{"t": 24.1, "h": 48, "gaz": 500, "pir": 0}'
 ```
 
 ## Troubleshooting
@@ -274,17 +274,17 @@ Subscribed to: sentinelx/g0X/cmd
 
 ### 3. Send command to ESP32
 ```bash
-mosquitto_pub -h localhost -p 1883 -t "sentinelx/g01/cmd" -m '{"buzzer": 1, "led": "rouge"}'
+mosquitto_pub -h localhost -p 1883 -t "sentinelx/g02/cmd" -m '{"buzzer": 1, "led": "rouge"}'
 ```
 
 ### 4. Monitor telemetry from ESP32
 ```bash
-mosquitto_sub -h localhost -p 1883 -t "sentinelx/g01/telemetry" -v
+mosquitto_sub -h localhost -p 1883 -t "sentinelx/g02/telemetry" -v
 ```
 
 You should see telemetry every 2 seconds:
 ```
-sentinelx/g01/telemetry {"t": 24.1, "h": 48, "gaz": 312, "pir": 0}
+sentinelx/g02/telemetry {"t": 24.1, "h": 48, "gaz": 312, "pir": 0}
 ```
 
 ## Quick Reference
