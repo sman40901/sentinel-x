@@ -57,7 +57,7 @@ void connectWiFi() {
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
-  Serial.print("\]: ");
+  Serial.print("\\]:");
   
   String message = "";
   for (unsigned int i = 0; i < length; i++) {
@@ -177,12 +177,13 @@ void publishTelemetry() {
   }
 
   // Vérifier si le seuil d'alerte de gaz est dépassé
-  if (gasValue > GAS_ALERT_THRESHOLD) {
+ if (gasValue > GAS_ALERT_THRESHOLD) {
     String alertPayload = "{\"type\":\"gaz\",\"niveau\":\"critique\"}";
     mqttClient.publish(topicAlerts.c_str(), alertPayload.c_str());
     Serial.println("Gas alert published!");
-  
 }
+
+} // closes publishTelemetry()
 
 // =========================================================
 // Initialisation
