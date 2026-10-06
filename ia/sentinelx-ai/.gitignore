@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+models/*.pt
+vision/data/encodings.pkl
+vision/known_faces/*
+!vision/known_faces/.gitkeep
+data/*
+!data/.gitkeep
+certs/*.key
+certs/*.pem
+certs/*.crt
