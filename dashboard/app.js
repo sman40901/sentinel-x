@@ -15,7 +15,12 @@ const CFG = {
   keepalive: 30,                // secondes
   // Seuils d'AFFICHAGE uniquement (la vraie détection d'anomalies est faite par l'IA)
   temp: { warn: 32, crit: 40 },
-  gaz:  { warn: 1200, crit: 2000 }   // valeur brute ADC ESP32 (0-4095) : à calibrer sur place
+  // Valeur brute de l'ADC du boîtier. ATTENTION : l'ESP8266 est en 10 bits
+  // (0-1023), pas en 12 bits (0-4095) comme l'ancien ESP32. Les seuils
+  // ci-dessous ont été divisés par 4 en conséquence — à recalibrer sur place.
+  // Le signal fiable reste gaz_d (écart en volts par rapport à la baseline),
+  // que le firmware publie à côté de gaz.
+  gaz:  { warn: 300, crit: 500 }
 };
 const T = {
   telemetry: `sentinelx/${CFG.group}/telemetry`,
@@ -379,17 +384,22 @@ $('logoutBtn').onclick = () => {
 $('demoBtn').onclick = () => {
   $('simBanner').hidden = false; showApp();
   log('warn', 'SIMULATION', 'Données fictives générées dans le navigateur');
-  let t = 23.5, h = 46, g = 450, k = 0;
+  let t = 23.5, h = 46, g = 210, k = 0;   // g sur l'échelle ADC 0-1023 de l'ESP8266
   state.boxStatus = 'online';
   state.sim = setInterval(() => {
     k++;
     t += (Math.random() - 0.45) * 0.3 + (k > 60 && k < 90 ? 0.35 : 0);   // montée lente de température
     h += (Math.random() - 0.5) * 0.8;
-    g += (Math.random() - 0.5) * 40 + (k > 70 && k < 90 ? 60 : 0);       // micro-déviation de gaz
+    g += (Math.random() - 0.5) * 10 + (k > 70 && k < 90 ? 15 : 0);       // micro-déviation de gaz
     const pir = Math.random() < 0.08 ? 1 : 0;
-    route(T.telemetry, JSON.stringify({ t: +t.toFixed(1), h: +h.toFixed(0), gaz: Math.max(0, Math.round(g)), pir }), false);
+    const pres = Math.max(0, Math.round(2 + (Math.random() - 0.5) * 4 + (k > 70 && k < 95 ? 7 : 0)));
+    route(T.telemetry, JSON.stringify({
+      t: +t.toFixed(1), h: +h.toFixed(0), gaz: Math.max(0, Math.round(g)), pir,
+      pres, assoc: Math.min(pres, 1), sniff: Math.max(0, pres - 1),
+      state: pres >= 10 || pir ? 'red' : pres >= 3 ? 'yellow' : 'green'
+    }), false);
     if (k === 85) route(T.alerts, JSON.stringify({ type: 'anomalie', niveau: 'critique', msg: 'Corrélation hausse température + gaz (Isolation Forest)' }), false);
     if (pir && Math.random() < 0.3) route(T.alerts, JSON.stringify({ type: 'intrus', niveau: 'attention', conf: 0.87 }), false);
-    if (k > 120) { k = 0; t = 23.5; g = 450; }
+    if (k > 120) { k = 0; t = 23.5; g = 210; }
   }, 2000);
 };
