@@ -183,6 +183,7 @@ void publishTelemetry() {
     Serial.println("Gas alert published!");
   
 }
+}
 
 // =========================================================
 // Initialisation
