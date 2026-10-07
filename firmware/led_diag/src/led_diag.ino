@@ -39,16 +39,16 @@ struct Channel {
 };
 
 const Channel CH[] = {
-  { "GREEN  (suspect)", "D5", D5, 14, true  },
-  { "YELLOW (working)", "D0", D0, 16, false },
-  { "RED    (working)", "D8", D8, 15, false },
+  { "GREEN  (validation)",    "D5", D5, 14, true  },
+  { "YELLOW (early warning)", "D0", D0, 16, false },
+  { "RED    (intruder)",      "D8", D8, 15, false },
 };
 const uint8_t CH_COUNT = sizeof(CH) / sizeof(CH[0]);
 
 // GPIO2 / D4 carries TWO things, both active-low: the module's own blue LED,
 // and (once wired) the buzzer's PNP switch. So the blue LED previews the
 // buzzer pattern even with no buzzer attached yet.
-const uint8_t BUZZER = D4;       // GPIO2, ACTIVE-LOW via PNP high-side switch
+const uint8_t BUZZER = D4;       // GPIO2, ACTIVE-HIGH: D4 -> 100R -> buzzer -> GND
 const uint8_t ONBOARD_LED = 2;   // same pin, the ESP-12F's own blue LED
 
 // As built: D4 -> 100R -> buzzer -> GND, so HIGH sounds it (active-HIGH).
@@ -212,7 +212,7 @@ void setup() {
   Serial.printf("reset     : %s\n", ESP.getResetReason().c_str());
   Serial.println(F("expected  : pin -> 220R -> LED -> GND, active-high"));
   Serial.println(F("            green D5/GPIO14, yellow D0/GPIO16, red D8/GPIO15"));
-  Serial.println(F("            buzzer D4/GPIO2, ACTIVE-LOW via PNP"));
+  Serial.println(F("            buzzer D4/GPIO2, ACTIVE-HIGH, direct + 100R"));
 
   // Proof-of-life independent of any external wiring.
   for (uint8_t i = 0; i < 3; i++) {
