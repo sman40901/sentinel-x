@@ -457,6 +457,23 @@ static void readGas() {
 
   gasBaseline = baselineSum / baselineSamples;
   Serial.printf("[gas] baseline settled at %.2f V\n", gasBaseline);
+
+  // Headroom check. An MQ's AO RISES with gas concentration, so a baseline
+  // already near the top of the measurable range leaves nothing to detect:
+  // the configured thresholds could never be reached no matter what the air
+  // does. Seen on the bench at 4.88 V of a 6.6 V range, which silently made
+  // gas detection impossible.
+  const float ceiling = ADC_FULL_SCALE_V * GAS_DIVIDER_RATIO;
+  if (gasBaseline > ceiling - GAS_CRIT_DELTA_V) {
+    Serial.printf("[gas] WARNING: baseline %.2f V of a %.2f V range leaves only "
+                  "%.2f V of headroom, less than GAS_CRIT_DELTA_V (%.2f V).\n",
+                  gasBaseline, ceiling, ceiling - gasBaseline, GAS_CRIT_DELTA_V);
+    Serial.println(F("[gas]          A critical gas alert can NEVER fire like this."));
+    Serial.println(F("[gas]          Either the MQ heater is still settling (give it"));
+    Serial.println(F("[gas]          longer), or its load resistor saturates the output,"));
+    Serial.println(F("[gas]          or the divider is wrong. Lower the thresholds only"));
+    Serial.println(F("[gas]          once you know which."));
+  }
 }
 #endif
 
