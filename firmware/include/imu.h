@@ -130,10 +130,26 @@ inline bool imuRead(ImuReading *out) {
 
 // --- tamper helpers -------------------------------------------------------
 
-// True when the box is tilted further than TILT_WARN_DEG from where gravity
-// says it should be lying flat.
-inline bool imuTilted(const ImuReading &r) {
-  return fabs(r.pitch) > TILT_WARN_DEG || fabs(r.roll) > TILT_WARN_DEG;
+// Smallest angle between two bearings, handling the wrap at +/-180. Plain
+// subtraction would read a 1 degree nudge across the boundary as 359 degrees.
+inline float imuAngleDelta(float a, float b) {
+  float d = fmod(fabs(a - b), 360.0f);
+  return d > 180.0f ? 360.0f - d : d;
+}
+
+// True when the box has moved more than TILT_WARN_DEG from the orientation it
+// was in at startup.
+//
+// Deliberately relative, not absolute. An enclosure is rarely level - mounted
+// on its side it reads roll ~-90 - so testing fabs(roll) > threshold reports
+// permanent tamper on a box that has never been touched. A NaN reference means
+// the baseline has not been captured yet, and nothing is reported.
+inline bool imuTiltedFrom(const ImuReading &r, float refPitch, float refRoll) {
+  if (isnan(refPitch) || isnan(refRoll)) {
+    return false;
+  }
+  return imuAngleDelta(r.pitch, refPitch) > TILT_WARN_DEG
+      || imuAngleDelta(r.roll, refRoll) > TILT_WARN_DEG;
 }
 
 // True on an impact. At rest the magnitude sits at ~1 g, so anything well

@@ -76,8 +76,12 @@ static_assert(PIN_IMU_SDA != PIN_IMU_SCL, "SDA and SCL cannot share a pin.");
 #endif
 
 #if ENABLE_BUZZER
-static_assert(PIN_BUZZER == D3,
-              "The buzzer must be on D3/GPIO0, wired active-low. See config.h section 2.");
+static_assert(PIN_BUZZER == D4,
+              "The buzzer must be on D4/GPIO2, active-low, switched by a PNP high-side "
+              "transistor. GPIO2 must be HIGH at reset; an NPN low-side switch would "
+              "clamp it low and the board would not boot. See config.h section 2.");
+static_assert(PIN_BUZZER != PIN_LED_GREEN && PIN_BUZZER != PIN_LED_YELLOW
+           && PIN_BUZZER != PIN_LED_RED, "The buzzer collides with an LED pin.");
 #endif
 
 // =========================================================
@@ -130,6 +134,10 @@ static ImuReading imu = {};
 static uint8_t imuWho = 0;
 static bool imuOk = false;
 static bool imuTamper = false;
+// Orientation the enclosure was in at startup. Tamper is measured against
+// this, not against level - see TILT_WARN_DEG in config.h.
+static float imuRefPitch = NAN;
+static float imuRefRoll = NAN;
 #endif
 
 #if ENABLE_PRESENCE
@@ -148,6 +156,9 @@ static unsigned long lastSerialLog = 0;
 // forgotten test command cannot leave the box lying about its state.
 static unsigned long ledOverrideUntil = 0;
 static bool ledOverride[3] = {false, false, false};   // green, yellow, red
+
+static unsigned long buzzerOverrideUntil = 0;
+static bool buzzerOverrideState = false;
 
 #if ENABLE_WEB_DASHBOARD
 ESP8266WebServer server(WEB_PORT);
@@ -192,12 +203,62 @@ static void ledWrite(uint8_t pin, bool on) {
 #endif
 }
 
+// Raw level, honouring BUZZER_ACTIVE_LOW so the wiring can change without
+// touching anything else. As built this board is ACTIVE-HIGH:
+// D4 -> 100R -> buzzer -> GND, so HIGH sounds it.
 static void buzzerWrite(bool on) {
 #if ENABLE_BUZZER
-  // GPIO0 is active-low here: driving it LOW turns the buzzer on.
+  #if BUZZER_ACTIVE_LOW
   digitalWrite(PIN_BUZZER, on ? LOW : HIGH);
+  #else
+  digitalWrite(PIN_BUZZER, on ? HIGH : LOW);
+  #endif
 #else
   (void)on;
+#endif
+}
+
+// Pattern engine, driven off millis() so nothing here ever blocks.
+//
+// An active buzzer has one pitch and one volume, so rhythm is the only
+// channel available to distinguish the states by ear:
+//
+//   RED     a burst of 3 beeps, then a pause - urgent, hard to ignore
+//   YELLOW  one 100 ms chirp every 4 s        - present, easy to live with
+//   GREEN   silent. A box that beeps when nothing is wrong gets taped over.
+//
+// RED is a burst and not a plain duty cycle on purpose: a fast on/off does not
+// read as a rhythm. Chopping an active buzzer at ~3 Hz just sounds like one
+// continuous warble, which is exactly how the first version came out on the
+// bench. Beeps need to be ~120 ms with a real pause between bursts to register
+// as separate events by ear.
+static void applyBuzzer() {
+#if ENABLE_BUZZER
+  const unsigned long now = millis();
+
+  if (now < buzzerOverrideUntil) {
+    buzzerWrite(buzzerOverrideState);
+    return;
+  }
+
+  switch (threatLevel) {
+    case THREAT_RED: {
+      // One beat = beep + gap. The burst is BEEPS beats, then a pause.
+      const unsigned long beat  = BUZZER_RED_BEEP_MS + BUZZER_RED_GAP_MS;
+      const unsigned long burst = beat * BUZZER_RED_BEEPS;
+      const unsigned long cycle = burst + BUZZER_RED_PAUSE_MS;
+      const unsigned long t = now % cycle;
+      buzzerWrite(t < burst && (t % beat) < BUZZER_RED_BEEP_MS);
+      break;
+    }
+    case THREAT_YELLOW:
+      buzzerWrite((now % BUZZER_YELLOW_PERIOD_MS) < BUZZER_YELLOW_ON_MS);
+      break;
+    case THREAT_GREEN:
+    default:
+      buzzerWrite(false);
+      break;
+  }
 #endif
 }
 
@@ -222,14 +283,12 @@ static void applyLeds() {
       ledWrite(PIN_LED_GREEN, false);
       ledWrite(PIN_LED_YELLOW, false);
       ledWrite(PIN_LED_RED, fastBlink);
-      buzzerWrite(fastBlink);
       break;
 
     case THREAT_YELLOW:
       ledWrite(PIN_LED_GREEN, false);
       ledWrite(PIN_LED_YELLOW, halfSecond);
       ledWrite(PIN_LED_RED, false);
-      buzzerWrite(false);
       break;
 
     case THREAT_GREEN:
@@ -239,7 +298,6 @@ static void applyLeds() {
       ledWrite(PIN_LED_GREEN, sensorsHealthy() ? true : halfSecond);
       ledWrite(PIN_LED_YELLOW, false);
       ledWrite(PIN_LED_RED, false);
-      buzzerWrite(false);
       break;
   }
 #endif
@@ -329,8 +387,9 @@ static void evaluateThreat() {
   if (imuOk && imuTamper) {
     if (!red) {
       yellow = true;
-      snprintf(reason, sizeof(reason), "Enclosure tampered (pitch %.0f, roll %.0f)",
-               imu.pitch, imu.roll);
+      snprintf(reason, sizeof(reason), "Enclosure moved %.0f deg from its startup position",
+               max(imuAngleDelta(imu.pitch, imuRefPitch),
+                   imuAngleDelta(imu.roll, imuRefRoll)));
     }
   }
 #endif
@@ -428,7 +487,16 @@ static void readImu() {
     Serial.println(F("[imu] read failed - check SDA on D6, SCL on D7"));
     return;
   }
-  imuTamper = imuTilted(imu) || imuShocked(imu);
+
+  // Capture the mounting orientation once, after it has had time to settle.
+  if (isnan(imuRefPitch) && millis() > IMU_BASELINE_MS) {
+    imuRefPitch = imu.pitch;
+    imuRefRoll  = imu.roll;
+    Serial.printf("[imu] reference orientation captured: pitch %.1f, roll %.1f\n",
+                  imuRefPitch, imuRefRoll);
+  }
+
+  imuTamper = imuTiltedFrom(imu, imuRefPitch, imuRefRoll) || imuShocked(imu);
 }
 #endif
 
@@ -637,8 +705,15 @@ static void mqttCallback(char *topic, byte *payload, unsigned int length) {
   Serial.printf("[mqtt] rx [%s] %s\n", topic, message);
   if (strcmp(topic, TOPIC_CMD) != 0) return;
 
+  // Bounded, like the LED override: a forgotten test command must not leave
+  // the box sounding indefinitely.
   const char *b = jsonField(message, "buzzer");
-  if (b) buzzerWrite(atoi(b) == 1);
+  if (b) {
+    buzzerOverrideState = atoi(b) == 1;
+    buzzerOverrideUntil = millis() + BUZZER_OVERRIDE_MS;
+    Serial.printf("[buzz] manual override %s for %lu ms\n",
+                  buzzerOverrideState ? "ON" : "OFF", BUZZER_OVERRIDE_MS);
+  }
 
   const char *l = jsonField(message, "led");
   if (l && *l == '"') {
@@ -661,7 +736,8 @@ static void mqttCallback(char *topic, byte *payload, unsigned int length) {
 
   if (jsonField(message, "auto")) {
     ledOverrideUntil = 0;         // hand control straight back
-    Serial.println(F("[led]  override cleared"));
+    buzzerOverrideUntil = 0;
+    Serial.println(F("[led]  overrides cleared"));
   }
 }
 
@@ -807,6 +883,14 @@ static void serialLog() {
 // =========================================================
 
 void setup() {
+#if ENABLE_BUZZER
+  // First action in the whole program. GPIO2's strap pull-up holds the pin high
+  // from reset, which sounds an active-high buzzer, so the sooner this runs the
+  // shorter the boot chirp.
+  pinMode(PIN_BUZZER, OUTPUT);
+  buzzerWrite(false);
+#endif
+
   Serial.begin(SERIAL_BAUD);
   delay(300);
   Serial.println();
@@ -829,8 +913,12 @@ void setup() {
 #endif
 
 #if ENABLE_BUZZER
-  pinMode(PIN_BUZZER, OUTPUT);
+  // Already initialised at the very top of setup(). One short beep, so a silent
+  // buzzer is known to be a wiring fault rather than nothing having triggered.
+  buzzerWrite(true);  delay(120);
   buzzerWrite(false);
+  Serial.printf("buzzer  : active, D4/GPIO2, active-%s\n",
+                BUZZER_ACTIVE_LOW ? "low" : "high");
 #endif
 
 #if ENABLE_CLIMATE
@@ -979,6 +1067,7 @@ void loop() {
   if (now - lastLedRefresh >= LED_REFRESH_MS) {
     lastLedRefresh = now;
     applyLeds();
+    applyBuzzer();
   }
 
 #if ENABLE_MQTT

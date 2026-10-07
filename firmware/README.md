@@ -40,7 +40,7 @@ broche ou un intervalle.
 | 🟢 LED verte (validation) | `D5` (GPIO14) | — | `D5 → 220 Ω → LED → GND` |
 | 🟡 LED jaune (pré-alerte) | `D0` (GPIO16) | — | idem |
 | 🔴 LED rouge (intrusion) | `D8` (GPIO15) | — | idem — **sens imposé, voir ci-dessous** |
-| Buzzer (option) | `D3` (GPIO0) | — | **actif à l'état bas**, voir ci-dessous |
+| Buzzer actif | `D4` (GPIO2) | — | **actif à l'état HAUT** : `D4 → 100 Ω → buzzer → GND`, voir ci-dessous |
 
 #### Les deux pièges de câblage qui empêchent la carte de démarrer
 
@@ -50,9 +50,82 @@ Ce ne sont pas des recommandations, c'est le strap de boot du chip :
   le chip refuse de démarrer si GPIO15 est haut au reset. Câbler la LED rouge
   dans l'autre sens (`3V3 → LED → D8`) bloque le boot jusqu'à ce que vous la
   débranchiez.
-- **`D3` (GPIO0) doit être actif à l'état bas** : `3V3 → buzzer → D3`, et on
-  tire la broche à LOW pour l'activer. Une charge vers GND sur GPIO0 le tire bas
-  au reset et la carte démarre en mode flash au lieu de lancer votre programme.
+- **`D4` (GPIO2) doit être HAUT au reset**, ce qui impose deux choses au
+  buzzer. Se tromper sur l'une ou l'autre empêche la carte de démarrer :
+  1. le buzzer est **actif à l'état bas** (broche à LOW = il sonne) ;
+  2. l'interrupteur doit être un **PNP côté haut**, pas un NPN côté bas. Un NPN
+     est actif à l'état haut, et sa résistance de base de 1 kΩ clouerait GPIO2
+     vers 0,7 V au reset — lu comme LOW, et le chip ne démarre jamais.
+
+  ```
+            3V3
+             │
+        E ───┴───  PNP  (2N3906 / BC557 / S8550)
+  GPIO2 ─[1k]─ B
+        C ───┬───
+             │
+         [buzzer]
+             │
+            GND
+  ```
+
+  **Pourquoi 1 kΩ et pas ~100 Ω ?** Ce ne sont pas deux variantes du même
+  montage. Le 1 kΩ est sur la **base** : `(3,3 − 0,7) / 1k ≈ 2,6 mA`, largement
+  assez pour saturer le transistor sur un buzzer de 25-30 mA, pendant que la
+  broche elle-même ne porte que ces 2,6 mA. Avec 100 Ω à cet endroit, la broche
+  encaisserait ~26 mA, au-delà de sa limite — ce qui annule tout l'intérêt du
+  transistor. Une résistance de ~100 Ω aurait un sens **en série avec le buzzer
+  sans transistor**, mais un buzzer actif a une tension minimale de
+  fonctionnement (souvent 2-2,5 V) : lui enlever ~1,4 V le rend muet, pas plus
+  discret.
+
+  **Alimenter le buzzer en 3,3 V, pas en 5 V.** Un émetteur à 5 V se trouve
+  1,7 V au-dessus d'une broche à 3,3 V : le Vbe n'atteindrait jamais 0 et le
+  buzzer ne pourrait plus être coupé.
+
+  GPIO2 porte aussi la LED bleue du module (également active à l'état bas) :
+  elle clignote donc avec le buzzer. Pratique — tant que le buzzer n'est pas
+  câblé, cette LED permet de valider le rythme.
+
+#### Montage réellement utilisé : attaque directe, actif à l'état HAUT
+
+Le PNP ci-dessus reste la solution propre, mais le boîtier est câblé en direct,
+sans transistor, et **dans l'autre sens** :
+
+```
+D4 (GPIO2) ──[100 Ω]──[buzzer]── GND
+```
+
+`BUZZER_ACTIVE_LOW 0` dans `config.h` : **HIGH = il sonne**. La résistance de
+100 Ω limite le courant que la broche doit fournir — et sert aussi de shunt de
+mesure, voir plus bas.
+
+Deux conséquences de ce câblage, aucune des deux n'étant un bug logiciel :
+
+- **GPIO2 est une broche de strap qui veut être HAUTE au reset**, et une charge
+  vers GND tire dans l'autre sens. Ça fonctionne ici parce que l'impédance
+  continue d'un buzzer actif est assez élevée, mais ça marche *malgré* le
+  câblage, pas grâce à lui. Un démarrage qui échoue par intermittence, ou un
+  buzzer remplacé, doit ramener directement ici.
+- **Le buzzer émet un bip court à chaque démarrage** : le pull-up de strap tient
+  GPIO2 haut avant que `setup()` ne tourne. `setup()` le coupe en toute première
+  action pour que ce soit le plus bref possible. C'est attendu, pas un défaut.
+
+Compromis à connaître si l'on baisse encore la résistance : un buzzer actif a
+une tension minimale de fonctionnement (souvent 2-2,5 V), donc trop de
+résistance le rend muet plutôt que discret. Si le volume s'écroule, descendre à
+47 Ω ou 68 Ω. Pour le plein volume *et* une broche protégée, repasser au PNP
+actif à l'état bas (`BUZZER_ACTIVE_LOW 1`).
+
+**La résistance sert aussi de shunt de mesure**, et 100 Ω rend le calcul
+immédiat. Multimètre aux bornes de la résistance pendant que le buzzer sonne :
+
+```
+I (mA) = V (aux bornes des 100 Ω) × 10
+```
+
+1,0 V = 10 mA, 1,4 V = 14 mA. C'est la mesure qui tranche pour de bon : sous
+~12 mA on est dans les specs, nettement au-dessus de 20 mA le PNP se justifie.
 
 `D5`, `D0` et `D8` ont été choisis pour que **les 3 LEDs soient toutes actives à
 l'état haut**, donc toutes câblées pareil. `D5` était la broche prévue pour le
@@ -131,6 +204,25 @@ Le bandeau de boot de la ROM sort à 74880 bauds et ressemble à du bruit à
 | 🟢 verte **qui clignote** | dégradé | ça tourne, mais un capteur ne répond pas |
 | 🟡 jaune | *pré-alerte* | score de présence WiFi ≥ `PRESENCE_WARN_SCORE`, gaz ≥ `GAS_WARN_DELTA_V`, ou boîtier incliné |
 | 🔴 rouge (clignotement rapide) | *intrusion* | mouvement PIR confirmé, gaz ≥ `GAS_CRIT_DELTA_V`, ou présence ≥ `PRESENCE_CRIT_SCORE` |
+
+Le buzzer suit la même machine à états. Un buzzer actif n'a qu'une seule
+hauteur et un seul volume, donc **le rythme est le seul moyen de distinguer les
+états à l'oreille** :
+
+| État | Rythme | Réglage |
+|---|---|---|
+| 🟢 vert | silencieux | un boîtier qui bipe quand tout va bien finit scotché |
+| 🟡 jaune | un bip de 100 ms toutes les 4 s | `BUZZER_YELLOW_ON_MS` / `BUZZER_YELLOW_PERIOD_MS` |
+| 🔴 rouge | rafale de 3 bips, puis une pause | `BUZZER_RED_BEEPS`, `BUZZER_RED_BEEP_MS`, `BUZZER_RED_GAP_MS`, `BUZZER_RED_PAUSE_MS` |
+
+Le rouge est une **rafale** et non un simple rapport cyclique, et ce n'est pas
+cosmétique : un découpage rapide ne s'entend pas comme un rythme. À ~3 Hz, la
+tonalité propre du buzzer plus le hachage donnent un bourdonnement continu —
+c'est exactement ce qu'a donné la première version au banc. Il faut des bips
+d'environ 120 ms séparés par une vraie pause pour que l'oreille les distingue.
+Garder `BUZZER_RED_BEEP_MS` nettement au-dessus de ~100 ms.
+
+Tout est non bloquant : la boucle principale n'attend jamais le buzzer.
 
 Jaune et rouge sont maintenues `WARNING_HOLD_MS` / `INTRUDER_HOLD_MS` après le
 dernier déclenchement, pour qu'un passage d'une fraction de seconde reste
@@ -267,7 +359,10 @@ si la carte est un ESP8266.
 
 | Symptôme | Cause |
 |---|---|
-| la carte ne démarre pas, ou démarre en mode flash | LED rouge câblée à l'envers sur `D8`, ou charge vers GND sur `D3`. Voir « les deux pièges » |
+| la carte ne démarre pas, ou démarre en mode flash | LED rouge câblée à l'envers sur `D8`. Voir « les deux pièges » |
+| démarrage qui échoue par intermittence | le buzzer sur `D4` tire GPIO2 vers le bas au reset. Augmenter la résistance série, ou repasser au montage actif à l'état bas |
+| bip court du buzzer à chaque démarrage | **normal** : pull-up de strap sur GPIO2 avant que `setup()` ne tourne |
+| le buzzer sonne pendant les pauses, se tait pendant les bips | polarité inversée : `BUZZER_ACTIVE_LOW` ne correspond pas au câblage |
 | reste sur `[sta] joining ...` | point d'accès en 5 GHz, ou réseau WPA2-Enterprise, ou SSID/mot de passe faux |
 | `state=-2` + erreur TLS | mauvaise IP, port 8883 bloqué par le pare-feu Windows, `ca.crt` mal collé, dates du certificat contre `BUILD_EPOCH`, ou plus assez de tas |
 | `state=4` ou `5` | utilisateur/mot de passe MQTT faux, ou mauvais groupe dans l'ACL |

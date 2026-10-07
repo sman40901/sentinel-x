@@ -39,7 +39,7 @@
   #define ENABLE_LEDS           1   // the 3 status LEDs
 #endif
 #ifndef ENABLE_BUZZER
-  #define ENABLE_BUZZER         0   // see PIN_BUZZER warning before enabling
+  #define ENABLE_BUZZER         1   // READ the PIN_BUZZER wiring notes first
 #endif
 #ifndef ENABLE_WEB_DASHBOARD
   #define ENABLE_WEB_DASHBOARD  1   // page + JSON API served by the board itself
@@ -74,12 +74,68 @@
 // !! refuses to boot if it is high at reset. Wiring the red LED the other way
 // !! round (3V3 -> LED -> D8) bricks boot until you unplug it.
 
-// !! GPIO0 (D3) is the flash-mode strap pin and MUST be active-low:
-// !!   3V3 -> buzzer/LED -> D3,  driven LOW to turn ON.
-// !! An active-high load to GND here pulls GPIO0 down at reset and the board
-// !! comes up in flash mode instead of running your sketch.
-#define PIN_BUZZER              D3      // GPIO0  — ACTIVE-LOW, only if ENABLE_BUZZER
-#define BUZZER_ACTIVE_LOW       1
+// Buzzer: ACTIVE type (built-in oscillator, so a plain level drives it), on
+// D4/GPIO2.
+//
+// ===== AS BUILT: direct drive, ACTIVE-HIGH =====
+//
+//      D4 ---[100R]---[buzzer]--- GND        BUZZER_ACTIVE_LOW 0
+//
+// Driving GPIO2 HIGH sounds it. The 100R limits the current the pin has to
+// source; measure the voltage across it while sounding to get the real figure,
+// I(mA) = V * 10.
+//
+// Two consequences of this wiring, neither of them software bugs:
+//
+//   * GPIO2 is a boot strap pin that wants to be HIGH at reset, and a load to
+//     GND pulls against that. It works here because an active buzzer's DC
+//     impedance is high enough, but it is working despite the wiring rather
+//     than because of it. An intermittent failure to boot, or a swapped
+//     buzzer, should send you straight back here.
+//   * The strap pull-up holds GPIO2 high before setup() runs, so the buzzer
+//     CHIRPS BRIEFLY AT EVERY BOOT. setup() silences it as its first action to
+//     keep that as short as possible. Expected, not a fault.
+//
+// ===== ALTERNATIVE: PNP high-side, ACTIVE-LOW =====
+//
+// The cleaner build, and what BUZZER_ACTIVE_LOW 1 expects. It keeps the strap
+// behaviour correct (the buzzer then acts as a pull-up on GPIO2) and takes the
+// buzzer current off the pin entirely.
+//
+// !! If you go back to that, GPIO2 MUST be HIGH at reset, which forces two
+// !! things, and getting either wrong stops the board booting:
+// !!
+// !!   1. The buzzer is ACTIVE-LOW. Driven LOW = sounding.
+// !!   2. The switch must be PNP (high-side), not NPN (low-side). An NPN is
+// !!      active-high, and its 1k base resistor would clamp GPIO2 near 0.7 V
+// !!      at reset, which reads as LOW and the chip never starts.
+// !!
+// !!             3V3
+// !!              |
+// !!         E ---+---  PNP  (2N3906 / BC557 / S8550)
+// !!   GPIO2 -[1k]- B
+// !!         C ---+---
+// !!              |
+// !!          [buzzer]
+// !!              |
+// !!             GND
+// !!
+// !! The 1k sets base current to ~2.6 mA, enough to saturate the transistor
+// !! for a 25-30 mA buzzer while the GPIO itself carries almost nothing.
+// !! Do NOT use ~100R there: the pin would sink ~26 mA, over its rating, which
+// !! defeats the point of the transistor.
+// !!
+// !! Keep the buzzer on 3V3, NOT 5 V. A 5 V emitter sits 1.7 V above a 3.3 V
+// !! GPIO, so Vbe never reaches 0 and the buzzer could never be switched off.
+// !!
+// !! GPIO2 also carries the module's onboard blue LED (also active-low), so it
+// !! flashes along with the buzzer. Handy: with no buzzer wired yet, that LED
+// !! previews the buzzer pattern for you.
+#define PIN_BUZZER              D4      // GPIO2 — see the two wiring options above
+
+// 0 = D4 -> 100R -> buzzer -> GND   (as built; HIGH sounds it)
+// 1 = 3V3 -> buzzer -> 100R -> D4   (PNP or direct; LOW sounds it)
+#define BUZZER_ACTIVE_LOW       0
 
 // =========================================================
 // 3. TIMING  (all milliseconds)
@@ -121,7 +177,14 @@
 #define GAS_CRIT_DELTA_V        0.90f       // -> intruder/critical (red) + alert
 
 // Tamper detection: the box being picked up, tilted or knocked.
-#define TILT_WARN_DEG           25.0f       // pitch or roll beyond this = tampered
+//
+// TILT_WARN_DEG is a deviation from the orientation the box was in AT STARTUP,
+// not an absolute angle. The enclosure is not necessarily level - on the bench
+// it sat at roll -89 - and comparing against 0 degrees made it report permanent
+// tamper and hold the system at YELLOW forever. Same principle as the gas
+// baseline: what matters is the change, not the absolute reading.
+#define TILT_WARN_DEG           25.0f       // deviation from the startup reference
+#define IMU_BASELINE_MS         5000UL      // settle this long before capturing it
 #define IMU_SHOCK_G             1.8f        // total accel spike = impact
 
 // =========================================================
@@ -201,6 +264,34 @@
 // back to the state machine. Bounded on purpose: a forgotten test command must
 // not leave the box permanently lying about what it can see.
 #define LED_OVERRIDE_MS         10000UL
+
+// --- buzzer patterns -------------------------------------------------------
+//
+// Deliberately different shapes rather than different volumes, because an
+// active buzzer has exactly one pitch and one loudness. Rhythm is the only
+// channel available, so red and yellow must be distinguishable by ear alone.
+//
+// All non-blocking: the loop never waits on the buzzer.
+// RED: a BURST of beeps, then a pause. Bursts rather than a plain on/off
+// duty cycle because a fast duty cycle does not read as a rhythm at all -
+// at ~3 Hz an active buzzer's own tone plus the chopping just sounds like one
+// continuous warble. Measured on the bench: 150/150 ms was indistinguishable
+// from a solid drone, while beeps around 120 ms separated by a clear pause are
+// unmistakable. Keep BUZZER_RED_BEEP_MS well above ~100 ms for this reason.
+#define BUZZER_RED_BEEPS        3        // beeps per burst
+#define BUZZER_RED_BEEP_MS      120UL    // length of each beep
+#define BUZZER_RED_GAP_MS       120UL    // silence between beeps in a burst
+#define BUZZER_RED_PAUSE_MS     700UL    // silence after the burst
+
+// YELLOW: one short chirp, rarely. Present but easy to live with.
+#define BUZZER_YELLOW_ON_MS     100UL
+#define BUZZER_YELLOW_PERIOD_MS 4000UL
+// Green is silent. A device that beeps when nothing is wrong gets taped over.
+
+// An MQTT {"buzzer":1} command holds the buzzer for this long, then hands it
+// back to the state machine. Same reasoning as LED_OVERRIDE_MS: a forgotten
+// test command must not leave the box sounding forever.
+#define BUZZER_OVERRIDE_MS      5000UL
 
 // =========================================================
 // 7. NETWORK
@@ -286,6 +377,8 @@
 // Those checks live as static_assert in src/main.cpp instead, where the real
 // constants are visible.
 
-#if ENABLE_BUZZER && !BUZZER_ACTIVE_LOW
-  #error "PIN_BUZZER is GPIO0, a strap pin. Active-high there breaks boot. See section 2."
-#endif
+// BUZZER_ACTIVE_LOW 0 on GPIO2 used to be a hard #error here, because a load to
+// GND pulls against a strap pin that wants to be HIGH at reset. It is now a
+// deliberate, measured choice on this build: it boots, and the trade-off is
+// written up in section 2. Left as a note rather than an error so the option
+// stays available, but read that section before changing the buzzer.
