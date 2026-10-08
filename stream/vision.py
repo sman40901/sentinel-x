@@ -212,24 +212,22 @@ class Vision:
         if raw is None:
             return []
 
-        # Suivi de vivacite d'abord : il faut une piste par detection, dans le
-        # MEME ordre, pour pouvoir les apparier ensuite par indice.
         now = time.time()
-        tracks = self.liveness.update(frame, raw)
-
         require = bool(liveness_mod.SETTINGS["require_liveness"])
         out = []
-        for i, det in enumerate(raw):
+        for det in raw:
             try:
                 # alignCrop redresse le visage avant l'empreinte : sans ca, une
-                # tete penchee ne ressemble plus a elle-meme.
+                # tete penchee ne ressemble plus a elle-meme. Le meme recadrage
+                # sert a la vivacite, qui compare l'apparence d'une image a
+                # l'autre dans ce repere canonique - donc aucun calcul en plus.
                 aligned = self.recognizer.alignCrop(frame, det)
                 emb = self.recognizer.feature(aligned).flatten()
             except cv2.error:
                 continue
             name, score = self.store.match(emb, SETTINGS["match_threshold"])
             box = tuple(int(v) for v in det[:4])
-            track = tracks[i] if i < len(tracks) else None
+            track = self.liveness.observe(det, aligned, now)
             live = bool(track and track.is_live(now))
 
             recognised = name is not None
@@ -238,20 +236,16 @@ class Vision:
             # ici.
             known = recognised and (live or not require)
 
+            # La seule consigne qui reste : s'approcher. La vivacite est
+            # desormais PASSIVE - il n'y a plus de geste a executer, donc plus
+            # rien a expliquer a quelqu'un qui ne voit pas l'ecran.
             prompt = ""
-            # La consigne s'affiche AUSSI pour un visage inconnu, pas seulement
-            # pour une personne deja enregistree : le premier enrolement se
-            # fait forcement avec un visage inconnu, et il exige lui aussi la
-            # vivacite. Sans ca, la toute premiere personne n'avait aucune
-            # indication a l'ecran de ce qu'on attendait d'elle.
-            if track is not None and not live and require:
-                if track.too_far:
-                    prompt = "Approchez-vous de la camera"
-                elif track.challenge is not None:
-                    prompt = track.challenge.prompt
+            if track is not None and not live and require and track.too_small:
+                prompt = "Approchez-vous de la camera"
             out.append(Face(box, name or "Inconnu", score, recognised, known,
                             live, prompt,
                             track.detail(now) if track is not None else None))
+        self.liveness.sweep(now)
         return out
 
     def _annotate(self, frame, faces):
@@ -397,10 +391,14 @@ class Vision:
         # d'autre, et le modele garderait pour toujours une empreinte qu'une
         # simple feuille de papier rejoue.
         if liveness_mod.SETTINGS["require_liveness"]:
-            live = [t for t in self.liveness.tracks if t.is_live(time.time())]
+            now = time.time()
+            live = [t for t in self.liveness.tracks if t.is_live(now)]
             if not live:
-                return None, ("vivacite non confirmee - "
-                              + (self.current_prompt() or "tournez la tete"))
+                detail = ""
+                if self.liveness.tracks:
+                    detail = self.liveness.tracks[0].detail(now)["explication"]
+                return None, f"vivacite non confirmee - {detail}" if detail \
+                    else "vivacite non confirmee - restez devant la camera"
 
         det = raw[0]
         aligned = self.recognizer.alignCrop(frame, det)

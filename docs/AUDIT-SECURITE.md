@@ -334,3 +334,62 @@ Un bouton coupe la voix, et le choix est retenu.
 Les refus d'enrolement sont desormais aussi journalises cote serveur. Ils ne
 l'etaient pas : une tentative s'est soldee par zero personne enrolee et aucune
 trace permettant de savoir ce qui avait manque.
+
+---
+
+## 6. Vivacite : constat d'echec sur ce materiel
+
+Cinq methodes essayees, toutes mesurees, **aucune fiable sur cette camera**.
+Le blocage est donc desactive par defaut : le systeme reconnait les visages,
+mais ne pretend pas distinguer un visage d'une photo.
+
+| methode | ce que la mesure a donne |
+|---|---|
+| parallaxe affine, 5 points de YuNet | bruit reel des points 1.9-3.1 px, du meme ordre que le signal : les populations se chevauchent |
+| ajustement par homographie | 8 degres de liberte pour 5 points, mal conditionne - une photo a sorti un residu de **2787** |
+| flot optique dense, fraction hors-plan | suit le DEPLACEMENT, pas la geometrie : photo approchee **48.9 %** contre 8.7 % pour un vrai visage |
+| defi de rotation de tete | casse par construction : tourner la tete REDUIT la distance inter-oculaire de cos(angle), donc les releves etaient jetes au moment ou le signal etait maximal. Echec instantane en usage reel. Et une photo gauchie a l'extreme atteint **0.92** contre un seuil de 0.60 |
+| rapport de changement d'apparence | depend de la DUREE d'observation et non de l'objet : le meme visage vivant a donne **0.70-0.77 sur 4 s** et **0.21-0.50 sur 6 s**, cette derniere plage etant celle d'une photo |
+
+### La cause commune
+
+Une seule webcam 640x480 grand angle. Mesure : un visage a distance normale
+fait **30 a 42 px** entre les yeux, et au maximum 70 px colle a l'objectif.
+Pas de profondeur, pas d'infrarouge, et aucun jeu d'attaques enregistrees pour
+calibrer un seuil. A cette resolution, ce qui distingue un visage d'une photo
+est du meme ordre de grandeur que le bruit de mesure.
+
+Trois erreurs de methode de ma part, a retenir :
+
+- j'ai calibre les premiers seuils sur un modele a **focale 600 px** qui n'est
+  pas celle de cette webcam, ce qui a rendu la taille minimale de visage
+  (75 px) **physiquement inatteignable** - le systeme reclamait
+  « approchez-vous » en boucle ;
+- j'ai valide le defi de rotation contre un modele geometrique et annonce
+  « neuf attaques refusees », resultat qui **ne tient pas** sur de vraies
+  images warpees ;
+- j'ai retenu un seuil sur une mesure (rapport 0.70) sans verifier sa
+  **stabilite** vis-a-vis de la fenetre d'observation, qui la fait tomber a
+  0.21.
+
+### Ce qui marcherait
+
+Par ordre d'efficacite :
+
+1. une camera avec **profondeur** (stereo, ToF) ou **infrarouge** - une photo
+   n'a pas de relief et ne rayonne pas comme de la peau. C'est ainsi que
+   procedent les systemes qui tiennent ;
+2. a defaut, une camera de meilleure resolution ou **montee plus pres**, pour
+   qu'un visage fasse 100 px et non 35 : plusieurs des methodes ci-dessus
+   separaient correctement en simulation a cette taille ;
+3. a defaut, un **modele anti-spoofing entraine**, avec un vrai jeu d'attaques
+   enregistrees sur CETTE camera pour l'evaluer. Sans ce jeu, aucun seuil
+   n'est honnete.
+
+### Ce que le systeme fait donc aujourd'hui
+
+- la reconnaissance faciale fonctionne et decide des alarmes ;
+- le rapport de changement d'apparence est calcule, publie et affiche en
+  direct dans le dashboard - **a titre indicatif** ;
+- **une photo imprimee d'une personne autorisee est acceptee.** C'est une
+  limite connue, mesuree et documentee, et non un oubli.
