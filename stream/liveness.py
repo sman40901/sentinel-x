@@ -100,14 +100,39 @@ SETTINGS = {
     "require_liveness": int(os.getenv("REQUIRE_LIVENESS", "1")),
     # Asymetrie SOUTENUE a atteindre de chaque cote, sur la mediane glissante.
     #
-    # 0.25 et pas plus bas : la mediane de 5 releves a un bruit d'environ
-    # 0.065 (bruit brut 0.117 mesure), donc 0.25 est a ~3.8 ecarts-types. Et
-    # pas plus haut : un vrai visage tourne de 25 deg tient 0.33.
-    "turn_required": float(os.getenv("LIVE_TURN", "0.25")),
-    # Temps accorde pour satisfaire le defi. Cale sur VISION_IDENTIFY_MS du
-    # boitier (5 s) : un defi plus long que la fenetre d'identification ferait
-    # sonner l'alarme pendant que la personne est encore en train d'obeir.
+    # 0.30, releve depuis 0.25 quand la fenetre d'identification du boitier est
+    # passee de 5 a 10 s. Ce n'est pas un reglage de confort : une fenetre deux
+    # fois plus longue donne deux fois plus de tirages a un attaquant qui agite
+    # une photo, et il faut relever la barre pour compenser. Mesure a 75 px,
+    # fenetre de 10 s, 800 tirages :
+    #
+    #   seuil 0.25 : 9.0 % d'attaques acceptees, 99.9 % des vrais visages a 30 deg
+    #   seuil 0.30 : 0.5 %                       96.2 %
+    #   seuil 0.35 : 0.1 %                       71.6 %
+    #
+    # 0.30 est le compromis : la rotation doit etre FRANCHE (un vrai visage a
+    # 40 deg passe a 100 %), mais une photo ne passe plus.
+    "turn_required": float(os.getenv("LIVE_TURN", "0.30")),
+    # Duree d'UN essai de defi - a ne pas confondre avec la fenetre
+    # d'identification du boitier, qui est plus longue (10 s).
+    #
+    # Les deux ont ete deliberement separees, chiffres a l'appui : allonger
+    # l'essai lui-meme est desastreux, parce que chaque releve de plus est une
+    # chance de plus qu'un extreme de bruit franchisse le seuil. Mesure a 75 px,
+    # 800 essais, attaque = photo agitee dans tous les sens :
+    #
+    #    essai de  5 s :  0.0 % d'attaques acceptees
+    #    essai de  8 s :  4.4 %
+    #    essai de 10 s : 18.6 %
+    #    essai de 15 s : 60.8 %
+    #
+    # On garde donc des essais COURTS, et on en autorise plusieurs dans la
+    # fenetre d'identification : deux essais de 5 s valent bien mieux qu'un
+    # seul de 10 s, pour l'attaquant comme pour l'utilisateur.
     "challenge_seconds": float(os.getenv("LIVE_CHALLENGE_SECONDS", "5.0")),
+    # Delai avant de proposer un nouvel essai apres un echec. Court, pour que
+    # un deuxieme essai tienne dans la fenetre d'identification de 10 s.
+    "retry_seconds": float(os.getenv("LIVE_RETRY_SECONDS", "1.5")),
     # Vivacite acquise : tient ce temps avant qu'un nouveau defi soit exige.
     # Sinon la personne devrait rejouer le defi en permanence.
     "hold_seconds": float(os.getenv("LIVE_HOLD_SECONDS", "90")),
@@ -149,6 +174,7 @@ LIMITS = {
     # photo agitee finit par passer, par pur hasard d'extremes.
     "turn_required":     (0.15, 1.50),
     "challenge_seconds": (2.0, 60.0),
+    "retry_seconds":     (0.0, 30.0),
     "hold_seconds":      (0.0, 3600.0),
     "min_iod_px":        (15.0, 200.0),
     "smooth":            (1, 15),
@@ -370,7 +396,6 @@ class FaceTrack:
 class Liveness:
     MATCH_FRACTION = 0.6
     FORGET_SECONDS = 2.0
-    RETRY_AFTER_FAIL = 3.0
 
     def __init__(self):
         self.tracks = []
@@ -386,7 +411,7 @@ class Liveness:
             # quelqu'un de legitime qui n'a pas compris la consigne doit
             # pouvoir reessayer sans intervention.
             if (t.challenge is not None and t.challenge.state == FAILED
-                    and now - t.challenge.deadline > self.RETRY_AFTER_FAIL):
+                    and now - t.challenge.deadline > SETTINGS["retry_seconds"]):
                 t.reset(now)
             t.observe(pts, now)
             t.sharpness, t.moire = texture_scores(frame, det[:4])

@@ -188,8 +188,8 @@ mesuree sur une mediane glissante : un bruit centre ne peut pas la produire.
 
 ### Performance mesuree, aux reglages livres
 
-Seuil +/-0.25 soutenu, mediane de 5 releves, fenetre de 5 s (calee sur le
-delai d'identification du boitier), 600 essais par case, bruit 2.5 px :
+Seuil +/-0.30 soutenu, mediane de 5 releves, essais de 5 s, 600 essais par
+case, bruit 2.5 px :
 
 | taille du visage | distance | attaques acceptees | vrai visage, 30 deg |
 |---|---|---|---|
@@ -229,3 +229,32 @@ extremes. Le reglage `sustain` reste disponible, a 1 par defaut.
   mesure. Le panneau « Preuve de vivacite » du dashboard affiche les chiffres
   en direct pour le verifier en vingt secondes, et `require_liveness` repasse
   en mesure-seule en un clic si le defi gene.
+
+### Le prix d'une fenetre d'identification plus longue
+
+Le delai d'identification du boitier est passe de 5 a 10 s. Ce n'est pas
+neutre pour ce controle, et la mesure le montre : chaque releve de plus est une
+chance de plus qu'un extreme de bruit franchisse le seuil des deux cotes. A
+75 px, 800 tirages, attaque = photo agitee dans tous les sens :
+
+| duree d'UN essai | attaques acceptees | vrai visage, 30 deg |
+|---|---|---|
+| 5 s | 0.0 % | 97.5 % |
+| 8 s | 4.4 % | 100 % |
+| 10 s | 18.6 % | 99.9 % |
+| 15 s | 60.8 % | 100 % |
+
+Deux consequences, toutes deux appliquees :
+
+1. **La duree d'un essai reste a 5 s**, decouplee de la fenetre
+   d'identification. Un echec donne droit a un nouvel essai au bout de 1.5 s,
+   donc deux essais tiennent dans les 10 s. Mesure sur la fenetre complete de
+   10 s : un seul essai de 10 s donne 19.8 % d'attaques acceptees, deux essais
+   de 5 s en donnent 6.2 % pour le meme temps d'observation.
+2. **Le seuil est passe de 0.25 a 0.30** pour absorber le reste. Sur la
+   fenetre de 10 s : 0.25 laissait passer 9.0 % des attaques, 0.30 en laisse
+   0.5 %, et 0.35 tombe a 0.1 % mais refuse 28 % des vrais visages a 30 deg.
+
+Le resultat net : 0.5 % d'attaques acceptees au lieu de 0.0 %, et la rotation
+doit etre FRANCHE - un vrai visage a 40 deg passe a 100 %, a 30 deg a 96 %, a
+25 deg seulement a 59 %. C'est le prix explicite des 10 secondes.

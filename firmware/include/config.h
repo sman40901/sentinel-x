@@ -312,7 +312,7 @@
 //                   MAINT_SILENCES_GAS is set.
 // =========================================================
 
-#define ENTRY_DELAY_MS          5000UL      // temps pour s'identifier avant l'alarme
+#define ENTRY_DELAY_MS          10000UL     // temps pour s'identifier avant l'alarme
 
 // A la fin de la temporisation d'entree, faut-il que quelque chose soit ENCORE
 // detecte pour declencher ?
@@ -347,12 +347,12 @@
 // Delai court exprès : la personne est deja devant l'objectif, il ne s'agit
 // que de montrer son visage. La temporisation longue d'ENTRY_DELAY_MS sert
 // a quelqu'un qui entre et doit traverser la piece.
-#define VISION_IDENTIFY_MS      5000UL
+#define VISION_IDENTIFY_MS      10000UL
 
 // Sans nouvelle de la camera pendant ce temps, on oublie ce qu'elle disait.
 // Sinon un service vision arrete laisserait le boitier croire eternellement
 // qu'une personne autorisee est presente - une porte ouverte permanente.
-#define VISION_STALE_MS         12000UL
+#define VISION_STALE_MS         20000UL
 
 // Fenetre pendant laquelle une detection compte encore comme "en cours" a
 // l'expiration. Le PIR retombe entre deux passages : exiger qu'il soit haut
