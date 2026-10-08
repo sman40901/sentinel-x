@@ -38,11 +38,27 @@
   <div id="simBanner" class="banner sim" hidden>MODE SIMULATION — données générées localement, aucun boîtier connecté</div>
   <div id="alertBanner" class="banner crit" hidden></div>
 
+  <section class="statebar" id="stateBar" data-st="armed">
+    <div class="state-main">
+      <span class="state-name" id="stName">—</span>
+      <span class="state-count" id="stCount" hidden></span>
+    </div>
+    <p class="state-why" id="stWhy"></p>
+    <div class="outs">
+      <span class="out"><i class="bulb g" id="bG"></i>Verte<small>validation</small></span>
+      <span class="out"><i class="bulb y" id="bY"></i>Jaune<small>pré-alerte</small></span>
+      <span class="out"><i class="bulb r" id="bR"></i>Rouge<small>intrusion</small></span>
+      <span class="out"><i class="spk" id="bZ"></i>Buzzer<small id="bZt">silencieux</small></span>
+    </div>
+  </section>
+
   <section class="tiles">
     <article class="tile" id="tileTemp"><h3>Température</h3><p class="val"><span id="vTemp">—</span><small>°C</small></p><p class="sub" id="sTemp">DHT22</p></article>
     <article class="tile" id="tileHum"><h3>Humidité</h3><p class="val"><span id="vHum">—</span><small>%</small></p><p class="sub">DHT22</p></article>
     <article class="tile" id="tileGaz"><h3>Gaz / fumée</h3><p class="val"><span id="vGaz">—</span><small>brut</small></p><p class="sub" id="sGaz">MQ-2</p></article>
     <article class="tile" id="tilePir"><h3>Mouvement</h3><p class="val"><span id="vPir">—</span></p><p class="sub">PIR HC-SR501</p></article>
+    <article class="tile" id="tileTamper"><h3>Sabotage</h3><p class="val"><span id="vTamper">—</span><small>°</small></p><p class="sub" id="sTamper">MPU-6500</p></article>
+    <article class="tile" id="tilePres"><h3>Présence WiFi</h3><p class="val"><span id="vPres">—</span></p><p class="sub" id="sPres">sniffer</p></article>
     <article class="tile" id="tileAlerts"><h3>Alertes</h3><p class="val"><span id="vAlerts">0</span></p><p class="sub">depuis l'ouverture</p></article>
   </section>
 
@@ -62,23 +78,125 @@
       <header><h2>Gaz (MQ-2)</h2><span class="legend"><i class="c3"></i>valeur brute</span></header>
       <canvas id="chartGaz"></canvas>
     </article>
-    <article class="panel">
-      <header><h2>Commandes boîtier</h2></header>
+    <article class="panel span2">
+      <header>
+        <h2>Commandes boîtier</h2>
+        <span class="tag" id="maintTag">verrouillé</span>
+      </header>
+
       <div class="ctrl">
-        <p class="lbl">Buzzer d'alarme</p>
-        <div class="row">
-          <button class="btn danger" data-cmd='{"buzzer":1}'>Activer</button>
-          <button class="btn" data-cmd='{"buzzer":0}'>Couper</button>
-        </div>
-        <p class="lbl">LEDs d'état</p>
-        <div class="row">
-          <button class="btn led g" data-cmd='{"led":"vert"}'>Vert</button>
-          <button class="btn led y" data-cmd='{"led":"jaune"}'>Jaune</button>
-          <button class="btn led r" data-cmd='{"led":"rouge"}'>Rouge</button>
-          <button class="btn" data-cmd='{"led":"off"}'>Éteindre</button>
+        <p class="lbl">Maintenance</p>
+        <p class="hint" id="maintHint">Le boîtier refuse toute commande tant qu'il n'est pas en maintenance.</p>
+        <form class="row" id="maintForm" autocomplete="off">
+          <input id="maintPin" type="password" inputmode="numeric" placeholder="Code de maintenance"
+                 autocomplete="off" maxlength="32">
+          <button type="submit" class="btn primary" id="maintBtn">Déverrouiller</button>
+          <button type="button" class="btn" id="armBtn">Ré-armer</button>
+        </form>
+
+        <div id="unlocked" hidden>
+          <p class="lbl">Mode des sorties</p>
+          <div class="row seg" id="segMode">
+            <button class="btn" data-mode="auto">Automatique</button>
+            <button class="btn" data-mode="manual">Manuel</button>
+          </div>
+
+          <p class="lbl">Prévisualiser un état <em>sans déclencher de capteur</em></p>
+          <div class="row seg" id="segForce">
+            <button class="btn" data-force="none">Réel</button>
+            <button class="btn" data-force="armed">Armé</button>
+            <button class="btn" data-force="entry">Entrée</button>
+            <button class="btn" data-force="alarm">Alarme</button>
+          </div>
+
+          <p class="lbl">Sorties</p>
+          <div class="row">
+            <button class="btn led g" data-led="vert">Verte</button>
+            <button class="btn led y" data-led="jaune">Jaune</button>
+            <button class="btn led r" data-led="rouge">Rouge</button>
+            <button class="btn" id="bzToggle">Buzzer</button>
+            <button class="btn" id="bzBeep">Bip</button>
+            <button class="btn" id="allOff">Tout éteindre</button>
+          </div>
+
+          <p class="lbl">Options</p>
+          <div class="row">
+            <button class="btn" id="muteBtn">Couper les alarmes</button>
+            <button class="btn" id="sniffBtn">Sniffer WiFi</button>
+          </div>
+
+          <p class="lbl">Exercice <em>déroule la vraie chaîne d'alarme, sans intrusion</em></p>
+          <div class="row">
+            <button class="btn" data-drill="entry">Simuler une détection</button>
+            <button class="btn danger" data-drill="alarm">Déclencher l'alarme</button>
+          </div>
+
+          <p class="lbl">Recalibrer</p>
+          <div class="row">
+            <button class="btn" data-rebase="imu">Référence sabotage</button>
+            <button class="btn" data-rebase="gas">Baseline gaz</button>
+            <button class="btn" data-rebase="presence">Niveau WiFi habituel</button>
+          </div>
         </div>
       </div>
     </article>
+
+    <article class="panel span3" id="testPanel" hidden>
+      <header><h2>Auto-test</h2><span class="chips" id="tSum"></span></header>
+      <div class="row">
+        <button class="btn primary" id="tStart">Démarrer</button>
+        <button class="btn" id="tPause" disabled>Pause</button>
+        <button class="btn" id="tStop" disabled>Arrêter</button>
+        <button class="btn" id="tPrev" disabled>Précédent</button>
+        <button class="btn" id="tNext" disabled>Suivant</button>
+        <button class="btn" id="tLoop">Boucle</button>
+        <button class="btn" id="tWait">Attendre ma réponse</button>
+      </div>
+      <div class="prog"><i id="tBar"></i></div>
+      <div class="now">
+        <p class="pos" id="tPos">Inactif</p>
+        <p class="nm" id="tName">Appuyez sur Démarrer</p>
+        <p class="hint" id="tHint"></p>
+        <p class="left" id="tLeft"></p>
+        <div class="ask" id="tAsk" hidden>Est-ce correct ?
+          <button class="btn yes" id="tYes">Oui</button>
+          <button class="btn no" id="tNo">Non</button>
+        </div>
+      </div>
+      <ol class="steps" id="tList"></ol>
+    </article>
+    <article class="panel span2">
+      <header>
+        <h2>Personnes autorisées</h2>
+        <span class="tag" id="faceTag">—</span>
+      </header>
+      <p class="hint" id="faceHint">La reconnaissance tourne en continu. Un visage inconnu déclenche une alerte et une capture.</p>
+      <form class="row" id="faceForm" autocomplete="off">
+        <input id="faceName" placeholder="Nom de la personne" maxlength="40" autocomplete="off">
+        <button type="submit" class="btn primary" id="faceAdd">Enregistrer le visage</button>
+      </form>
+      <p class="hint">Une seule personne face à la caméra, puis enregistrez. Recommencez sous un autre angle pour fiabiliser.</p>
+      <ul class="people" id="people"></ul>
+    </article>
+
+    <article class="panel">
+      <header><h2>Captures</h2><span class="tag" id="shotTag">—</span></header>
+      <div class="shots" id="shots"></div>
+      <p class="hint">Prises à chaque détection, alarme, identification ou visage inconnu.</p>
+    </article>
+
+    <article class="panel span3">
+      <header>
+        <h2>Réglages de la caméra</h2>
+        <span class="tag" id="cfgTag">—</span>
+      </header>
+      <p class="hint">Appliqués immédiatement, sans redémarrage. Réservés à la maintenance.</p>
+      <div class="settings" id="settings"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="cfgReset">Valeurs par défaut</button>
+      </div>
+    </article>
+
     <article class="panel span3">
       <header><h2>Journal des événements</h2><button class="btn ghost small" id="clearLog">Vider</button></header>
       <ol class="log" id="log"></ol>

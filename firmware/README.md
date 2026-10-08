@@ -196,144 +196,218 @@ Le bandeau de boot de la ROM sort à 74880 bauds et ressemble à du bruit à
 
 ---
 
-## Les 3 LEDs
+## Les 3 LEDs et le buzzer
 
-| LED | État | Déclencheurs |
-|---|---|---|
-| 🟢 verte **fixe** | *validation* | tous les capteurs répondent, rien détecté |
-| 🟢 verte **qui clignote** | dégradé | ça tourne, mais un capteur ne répond pas |
-| 🟡 jaune | *pré-alerte* | score de présence WiFi ≥ `PRESENCE_WARN_SCORE`, gaz ≥ `GAS_WARN_DELTA_V`, ou boîtier incliné |
-| 🔴 rouge (clignotement rapide) | *intrusion* | mouvement PIR confirmé, gaz ≥ `GAS_CRIT_DELTA_V`, ou présence ≥ `PRESENCE_CRIT_SCORE` |
+Les états et leurs rythmes sont décrits dans « Alarme, maintenance et
+auto-test » plus bas. Ce qui compte au câblage :
 
-Le buzzer suit la même machine à états. Un buzzer actif n'a qu'une seule
-hauteur et un seul volume, donc **le rythme est le seul moyen de distinguer les
-états à l'oreille** :
+Au démarrage, les 3 LEDs s'allument l'une après l'autre. Une LED qui ne
+s'allume **pas** à ce moment-là est mal câblée, pas inactive.
 
-| État | Rythme | Réglage |
-|---|---|---|
-| 🟢 vert | silencieux | un boîtier qui bipe quand tout va bien finit scotché |
-| 🟡 jaune | un bip de 100 ms toutes les 4 s | `BUZZER_YELLOW_ON_MS` / `BUZZER_YELLOW_PERIOD_MS` |
-| 🔴 rouge | rafale de 3 bips, puis une pause | `BUZZER_RED_BEEPS`, `BUZZER_RED_BEEP_MS`, `BUZZER_RED_GAP_MS`, `BUZZER_RED_PAUSE_MS` |
-
-Le rouge est une **rafale** et non un simple rapport cyclique, et ce n'est pas
-cosmétique : un découpage rapide ne s'entend pas comme un rythme. À ~3 Hz, la
-tonalité propre du buzzer plus le hachage donnent un bourdonnement continu —
-c'est exactement ce qu'a donné la première version au banc. Il faut des bips
-d'environ 120 ms séparés par une vraie pause pour que l'oreille les distingue.
-Garder `BUZZER_RED_BEEP_MS` nettement au-dessus de ~100 ms.
+Un buzzer actif n'a qu'une hauteur et qu'un volume, donc **le rythme est le
+seul moyen de distinguer les états à l'oreille**. Le rouge est une **rafale**
+et non un simple rapport cyclique : à ~3 Hz, la tonalité propre du buzzer plus
+le hachage donnent un bourdonnement continu — c'est exactement ce qu'a donné la
+première version au banc. Il faut des bips d'environ 120 ms séparés par une
+vraie pause. Garder `BUZZER_RED_BEEP_MS` nettement au-dessus de ~100 ms.
 
 Tout est non bloquant : la boucle principale n'attend jamais le buzzer.
-
-Jaune et rouge sont maintenues `WARNING_HOLD_MS` / `INTRUDER_HOLD_MS` après le
-dernier déclenchement, pour qu'un passage d'une fraction de seconde reste
-visible. Au démarrage, les 3 LEDs s'allument l'une après l'autre : une LED qui
-ne s'allume pas à ce moment-là est mal câblée, pas inactive.
 
 ---
 
 ## Détection d'appareils WiFi
 
-Deux signaux indépendants, volontairement comptés séparément :
+Capture en mode promiscuous des *probe requests* : les téléphones qui ne sont
+connectés à rien chez nous demandent en permanence les réseaux qu'ils
+connaissent. C'est le signal « à travers les murs ».
 
-| Signal | Ce que c'est | Fiabilité |
-|---|---|---|
-| **associés** | appareils connectés au point d'accès du boîtier | exact et continu |
-| **sniffés** | téléphones qui ne nous parlent pas du tout, vus via leurs *probe requests* en mode promiscuous | c'est le signal « à travers les murs » |
+Chaque `SNIFF_PERIOD_MS`, la radio écoute `SNIFF_WINDOW_MS` en sautant les
+canaux 1/6/11 et compte les appareils distincts entendus **au-dessus de
+`SNIFF_MIN_RSSI`**. Ce compte est comparé à ce qui est **normal pour l'endroit** :
 
-`score = associés × PRESENCE_ASSOC_WEIGHT + sniffés × PRESENCE_SNIFF_WEIGHT`
+| Phase | Ce qui se passe |
+|---|---|
+| apprentissage | les `PRESENCE_LEARN_WINDOWS` premières fenêtres ne font que mesurer ; leur moyenne devient le niveau habituel |
+| surveillance | un excès de `PRESENCE_WARN_EXCESS` appareils, **`PRESENCE_CONFIRM_WINDOWS` fenêtres de suite**, lève la pré-alerte. Une fenêtre calme l'efface |
+| suivi | les fenêtres calmes font dériver le niveau habituel ; une alerte le **gèle**, donc une vraie affluence n'est jamais apprise comme normale |
 
-### Trois limites à connaître avant de régler les seuils
+### Pourquoi la première version était inutilisable
 
-1. **L'ESP8266 ne peut pas sniffer et héberger le point d'accès en même temps.**
-   Le mode promiscuous exige d'être en station seule, donc chaque fenêtre de
-   sniff **coupe le point d'accès** : les clients du dashboard sont éjectés et
-   le lien MQTT tombe le temps de la fenêtre. D'où `SNIFF_WINDOW_MS` court
-   (3 s) et `SNIFF_PERIOD_MS` long (60 s). Le dashboard affiche le compte à
-   rebours ; quelques requêtes ratées à ce moment-là sont normales.
+Elle comptait **toutes** les MAC vues dans les cinq dernières minutes, jusqu'à
+-80 dBm, face à un seuil fixe de 3. Dans un bâtiment c'est toujours dépassé —
+voisins, passants, votre propre téléphone — donc elle alertait dès le démarrage
+et ne redescendait jamais. D'où les trois changements : fenêtre **courante**
+seulement, portée réduite à **-65 dBm**, et comparaison à un niveau **appris**
+plutôt qu'à un nombre fixe.
+
+### Limites qu'aucun réglage ne supprime
+
+1. **L'ESP8266 ne peut pas sniffer et rester connecté en même temps.** Chaque
+   fenêtre coupe le lien WiFi ; MQTT se reconnecte ensuite. Le sniffer est donc
+   suspendu pendant la maintenance et l'auto-test, où perdre le lien en pleine
+   action serait pire que rater une fenêtre.
 2. **Les téléphones randomisent leur adresse MAC** (iOS 8+, Android 10+). Un
-   seul téléphone peut émettre une dizaine d'adresses en une minute. Le compte
-   de MAC uniques est donc un **niveau d'activité, pas un décompte de
-   personnes**. Le firmware sépare `randomized` et `stable` exprès, pour que le
-   chiffre puisse être lu honnêtement.
+   seul téléphone peut émettre une dizaine d'adresses en une minute : le compte
+   est un **niveau d'activité, pas un décompte de personnes**. `randomized` et
+   `stable` sont comptés séparément exprès.
 3. **Un radio ne mesure pas une distance.** Le RSSI y est vaguement corrélé et
    massacré par les murs, les corps et l'orientation. `SNIFF_MIN_RSSI` est un
    réglage de rayon grossier, pas une distance en mètres.
 
-Le sniffer capture des identifiants diffusés en clair. C'est sans problème sur
-votre propre banc ; réfléchissez avant de le pointer vers une salle publique.
-`PRESENCE_SNIFFER 0` ne garde que le comptage des clients associés, sans jamais
-couper le point d'accès.
+La présence seule ne vaut jamais qu'une **pré-alerte** : c'est trop indirect
+pour désigner un intrus.
+
+Cela capte des identifiants diffusés en clair. Sans problème sur votre propre
+banc ; réfléchissez avant de le pointer vers une salle publique.
 
 ---
 
 ## Réseau
 
-Le boîtier est en **AP + station** simultanément :
+Le boîtier est un **simple client WiFi**. Il n'héberge ni point d'accès ni page
+web : c'est voulu, rien n'écoute sur la carte, donc il n'y a aucune surface à
+attaquer dessus.
 
 | | |
 |---|---|
-| Point d'accès hébergé | `AP_SSID` de `secrets.h` (défaut `Sentinel-X`) |
-| Dashboard embarqué | `http://192.168.4.1/` ou `http://sentinel-x.local/` |
-| API JSON embarquée | `http://192.168.4.1/api/readings` |
-| Réseau rejoint | `WIFI_SSID` de `secrets.h`, pour atteindre le broker |
+| Réseau rejoint | `WIFI_SSID` de `secrets.h` — le hotspot du PC serveur |
+| Broker | `MQTT_HOST:MQTT_PORT` de `config.h` (8883, TLS) |
+| Interface | `../dashboard`, servi par nginx **depuis le PC**, jamais depuis la carte |
 
-Les deux radios partagent un seul canal (celui de la station gagne) : c'est
-normal.
+La connexion est **non bloquante** : un hotspot absent ou un broker éteint ne
+fige jamais la boucle. Les capteurs, les LED et la sirène continuent hors
+ligne, et les tentatives de reconnexion sont espacées
+(`MQTT_RETRY_MIN_MS` → `MQTT_RETRY_MAX_MS`).
 
 `WiFi.begin()` **ne sait pas rejoindre un réseau WPA2-Enterprise**
 (802.1X/PEAP), ce qu'est la plupart des WiFi de campus. Il faut du WPA2-PSK :
-le hotspot du PC serveur, ou un partage de connexion.
+le hotspot du PC serveur, ou un partage de connexion depuis un téléphone.
 
-**Le dashboard embarqué n'a aucune dépendance externe, et ça doit rester le
-cas.** Les clients du point d'accès n'ont pas d'accès Internet : une police ou
-un script sur CDN ne se dégrade pas, il fait attendre le chargement de la page
-jusqu'au timeout du navigateur.
-
-Le gros dashboard de supervision avec le flux webcam est un autre programme :
-`../dashboard`, servi par nginx depuis le PC serveur. **La caméra est une
-webcam USB branchée sur le PC**, elle ne touche jamais l'ESP8266.
+**La caméra est une webcam USB branchée sur le PC** : elle ne touche jamais
+l'ESP8266. Le flux est analysé par `../ia/sentinelx-ai` et proxifié par nginx.
 
 ---
+
+## Alarme, maintenance et auto-test
+
+Le boîtier n'héberge **plus de point d'accès ni de page web** : il rejoint le
+hotspot du PC serveur comme un client ordinaire et se pilote entièrement
+depuis le dashboard principal (`../dashboard`) via MQTT. Rien n'écoute sur la
+carte, donc il n'y a aucune surface à attaquer dessus.
+
+### La machine à états
+
+| État | LED | Buzzer | Ce qui se passe |
+|---|---|---|---|
+| **Sortie** | 🟡 lente | bip/s | Vient d'être armé : le temps de quitter la pièce |
+| **Armé** | 🟢 fixe | — | Surveille. 🟢 clignote si un capteur ne répond pas |
+| **Pré-alerte** | 🟡 lente | silencieux | Présence WiFi inhabituelle ou gaz en hausse légère |
+| **Entrée** | 🟡 rapide | bip/s | Détection : `ENTRY_DELAY_MS` pour s'identifier |
+| **Alarme** | 🔴 rapide | rafales | Personne ne s'est identifié. Dure `ALARM_DURATION_MS` puis ré-arme |
+| **Maintenance** | 🟢/🟡 alternées | silencieux | Déverrouillé : rien n'alarme, tout se pilote |
+
+Seul l'état **Armé** déclenche une intrusion, et seule une détection **nouvelle**
+démarre un cycle : un capteur bloqué en position haute provoque une alarme, pas
+une sirène sans fin. Le **gaz** ne passe pas par la temporisation d'entrée —
+c'est un risque de sécurité, pas une intrusion — et sonne même en maintenance
+sauf si `MAINT_SILENCES_GAS` vaut 1.
+
+### Maintenance : le seul état déverrouillé
+
+Tout ce qui pilote le boîtier (mode manuel, prévisualisation, auto-test,
+recalibrage, coupure du sniffer) est **refusé par la carte** hors maintenance —
+pas simplement grisé sur la page.
+
+Le code ne traverse jamais le réseau :
+
+1. la carte publie un *nonce* aléatoire dans son état ;
+2. le dashboard renvoie `sha256(nonce + ":" + code)` ;
+3. la carte recompare en temps constant.
+
+Le nonce est à usage unique — remplacé après **chaque** tentative, réussie ou
+non — donc une réponse interceptée ne se rejoue pas. Seule la carte peut lire
+le topic `cmd` (ACL Mosquitto), donc personne ne peut non plus collecter des
+réponses pour les attaquer hors ligne. Après `MAINT_MAX_FAILS` échecs, verrouillage
+`MAINT_LOCKOUT_MS`, et chaque tentative part en alerte de sécurité. La
+maintenance s'arrête seule au bout de `MAINT_TIMEOUT_MS`, en annulant toutes
+les dérogations.
+
+> **À faire avant la démo** : définir `MAINT_PIN` dans `include/secrets.h`.
+> Tant qu'il vaut `change-me`, la carte **refuse toute maintenance à distance**
+> plutôt que d'exposer une serrure devinable. Le dashboard l'affiche clairement.
+
+La **console série** est en revanche de confiance et n'exige pas de code : un
+accès USB à la carte signifie déjà un accès physique à la carte.
+
+### Auto-test
+
+Seize étapes : relecture électrique des 3 LED et du buzzer, chaque LED seule,
+tout éteint, tout allumé, les rythmes du buzzer, puis DHT22, MPU-6500, gaz et
+PIR. Démarrage, pause, reprise, étape précédente/suivante, saut direct, boucle,
+et un mode guidé qui attend un Oui/Non sur chaque étape visuelle.
+
+C'est une **machine à états non bloquante** : bloquer ici figerait MQTT et le
+dashboard perdrait la carte en plein test.
+
+### Exercice
+
+`Simuler une détection` et `Déclencher l'alarme` déroulent la vraie chaîne sans
+intrusion. Les alertes émises portent le type `exercice`, donc elles ne peuvent
+pas être confondues avec un événement réel dans le journal ou la base.
+
+## Réglages des capteurs
+
+Tout est dans `include/config.h`. Les valeurs actuelles viennent de mesures au
+banc, pas d'estimations.
+
+| Détection | Réglage | Pourquoi |
+|---|---|---|
+| **Gaz, hausse rapide** | `GAS_RISE_V` 0,40 V sur `GAS_RISE_WINDOW_MS` 5 s | Un briquet fait monter la mesure de ~1 V en deux secondes. Échantillonné à 4 Hz, sans baseline : marche 30 s après l'allumage au lieu d'attendre 3 min |
+| **Gaz, fuite lente** | `GAS_WARN_DELTA_V` / `GAS_CRIT_DELTA_V` au-dessus d'une baseline qui suit la dérive mais **gèle** dès que la mesure s'en écarte | Une vraie fuite ne peut pas être apprise comme normale |
+| **Sabotage** | `TILT_WARN_DEG` **8°** (était 25°), plus choc et rotation | 25° laissait passer un simple déplacement. Au repos la dérive mesurée est < 1° |
+| **Mouvement** | `PIR_CONFIRM_MS` 1 s, puis **front montant seulement** | Le HC-SR501 reste haut aussi longtemps que son potentiomètre TIME le dit — jusqu'à ~5 min. Aucun firmware ne raccourcit ça : mettre le potentiomètre au minimum |
+| **Présence WiFi** | apprend le niveau habituel sur 5 fenêtres, puis exige `PRESENCE_WARN_EXCESS` **confirmé 2 fenêtres de suite**, et seulement à `SNIFF_MIN_RSSI` **-65 dBm** | L'ancienne version comptait tout jusqu'à -80 dBm face à un seuil fixe : dans un bâtiment c'est toujours dépassé, donc elle alertait tout de suite et ne redescendait jamais |
+
+La présence seule ne vaut jamais qu'une **pré-alerte** : une activité WiFi est
+trop indirecte pour désigner un intrus. Il faut le PIR ou le sabotage.
 
 ## Topics MQTT
 
-Les noms sont imposés par `../mosquitto/config/acl`. Le compte MQTT s'appelle
-toujours `esp32` pour que l'ACL et le `.env` du serveur restent valables, même
-si la carte est un ESP8266.
+Noms imposés par `../mosquitto/config/acl`. Seul `GROUP_ID` devrait changer.
 
 ### Publication
 
-- **`sentinelx/g02/telemetry`** toutes les `TELEMETRY_INTERVAL_MS`
+| Topic | Contenu |
+|---|---|
+| `telemetry` | mesures, toutes les 5 s — forme inchangée pour l'API et l'IA |
+| `state` | **état complet, retenu** : alarme, décompte, LED, buzzer, capteurs, maintenance |
+| `test` | avancement de l'auto-test, retenu |
+| `testmeta` | liste des étapes, retenu, publié une fois par connexion |
+| `alerts` | alarmes et événements de sécurité |
+| `status` | `online` / `offline` (*last will* : c'est le broker qui publie `offline`) |
 
-  ```json
-  {"t":24.1,"h":48,"gaz":312,"pir":0,"rssi":-62,
-   "gaz_v":1.98,"gaz_d":0.12,
-   "pres":4,"assoc":1,"sniff":3,
-   "tilt":0,"state":"green","heap":14200}
-  ```
+`state` est **retenu**, donc un dashboard ouvert plus tard voit l'état courant
+immédiatement au lieu d'une page vide. Le rythme passe à 1 s pendant un
+décompte, pour que le compteur de la page suive celui de la carte.
 
-  `gaz` est l'ADC brut, **0-1023**. `t` et `h` valent `null` quand le DHT22 n'a
-  pas donné de lecture valable — exprès, pour qu'un capteur mort ne fasse pas
-  jeter les données de gaz et de mouvement avec lui.
+### Abonnement : `cmd`
 
-- **`sentinelx/g02/alerts`** — `type` ∈ `gaz`, `mouvement`, `sabotage`,
-  `presence` ; `niveau` ∈ `attention`, `critique`. Une alerte par type au plus
-  toutes les `ALERT_COOLDOWN_MS`.
+```json
+{"maint":"<sha256 hex>"}   {"maint":"off"}   {"arm":"now"}
+{"test":"start"}           {"test":"goto","step":5}   {"test":"confirm","step":5,"flag":1}
+{"mode":"manual"}          {"force":"alarm"}          {"vert":1}
+{"buzzer":1}  {"beep":300} {"alloff":1}  {"mute":1}   {"sniff":0}
+{"rebase":"imu"}           {"drill":"entry"}
+```
 
-- **`sentinelx/g02/status`** — `online` / `offline`, en retained. Le `offline`
-  est un *Last Will* : c'est le broker qui le publie si le boîtier disparaît.
+Bornes côté carte : `CMD_MAX_BYTES` (au-delà, rejeté sans être lu) et
+`CMD_RATE_PER_S` (au-delà, ignoré — répondre à un flood l'alimente).
 
-### Abonnement
+### Console série
 
-- **`sentinelx/g02/cmd`**
-  - `{"buzzer":1}`
-  - `{"led":"rouge"}` — aussi `vert`, `jaune`, `blanc`, `eteint`. Prend la main
-    sur les LEDs pendant `LED_OVERRIDE_MS` puis **rend automatiquement le
-    contrôle** à la machine à états : une commande de test oubliée ne doit pas
-    laisser le boîtier mentir indéfiniment sur ce qu'il voit.
-  - `{"auto":1}` — rend la main tout de suite.
-
----
+Le même JSON, à 115200 bauds, sans rejoindre le réseau. `s` état, `r` mesures,
+`t` / `m` auto-test, ou n'importe quelle commande JSON telle quelle. C'est ce
+qui a servi à valider le firmware sur la carte.
 
 ## TLS sur ESP8266 : les deux vrais problèmes
 

@@ -130,30 +130,24 @@ inline bool imuRead(ImuReading *out) {
 
 // --- tamper helpers -------------------------------------------------------
 
-// Smallest angle between two bearings, handling the wrap at +/-180. Plain
-// subtraction would read a 1 degree nudge across the boundary as 359 degrees.
-inline float imuAngleDelta(float a, float b) {
-  float d = fmod(fabs(a - b), 360.0f);
-  return d > 180.0f ? 360.0f - d : d;
-}
-
-// True when the box has moved more than TILT_WARN_DEG from the orientation it
-// was in at startup.
+// Angle in degrees between the current gravity vector and a reference one.
 //
-// Deliberately relative, not absolute. An enclosure is rarely level - mounted
-// on its side it reads roll ~-90 - so testing fabs(roll) > threshold reports
-// permanent tamper on a box that has never been touched. A NaN reference means
-// the baseline has not been captured yet, and nothing is reported.
-inline bool imuTiltedFrom(const ImuReading &r, float refPitch, float refRoll) {
-  if (isnan(refPitch) || isnan(refRoll)) {
-    return false;
+// This replaces comparing pitch and roll against a reference separately, which
+// breaks near pitch +/-90: roll is then atan2 of two near-zero numbers and
+// swings on sensor noise alone. Measured on the bench with the board perfectly
+// still (|a| steady at 1.01 g, pitch steady to 0.8 deg) roll wandered over
+// 10.3 deg - most of the way to a false tamper alarm. The angle between two
+// vectors has no singularity in any orientation, so how the box is mounted no
+// longer matters.
+inline float imuAngleFromRef(const ImuReading &r, const float ref[3]) {
+  const float dot = r.ax * ref[0] + r.ay * ref[1] + r.az * ref[2];
+  const float mag = sqrtf((r.ax * r.ax + r.ay * r.ay + r.az * r.az)
+                        * (ref[0] * ref[0] + ref[1] * ref[1] + ref[2] * ref[2]));
+  if (mag <= 0.0f) {
+    return 0.0f;
   }
-  return imuAngleDelta(r.pitch, refPitch) > TILT_WARN_DEG
-      || imuAngleDelta(r.roll, refRoll) > TILT_WARN_DEG;
-}
-
-// True on an impact. At rest the magnitude sits at ~1 g, so anything well
-// above that is the box being struck or dropped.
-inline bool imuShocked(const ImuReading &r) {
-  return r.magnitude > IMU_SHOCK_G;
+  float c = dot / mag;
+  if (c > 1.0f) c = 1.0f;          // rounding can push it a hair past 1
+  if (c < -1.0f) c = -1.0f;
+  return acosf(c) * RAD_TO_DEGREES;
 }

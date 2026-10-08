@@ -179,3 +179,37 @@ L'API/dashboard peut donc consommer les alertes produites par cette brique.
 Les identifiants MQTT sont lus depuis `.env`.
 Les certificats TLS sont lus depuis les chemins configurés.
 Aucun mot de passe ou certificat privé ne doit être commité.
+
+## Flux webcam vers le dashboard
+
+`vision.py` affiche les images dans une fenetre OpenCV locale (`cv2.imshow`) :
+il n'expose **rien** en HTTP. Or nginx proxifie `/video/` vers le port 8080 de
+la machine hote, donc le panneau "Webcam" du dashboard ne pouvait jamais rien
+afficher.
+
+`stream.py` comble ce trou et ne depend que d'opencv — ni YOLO, ni dlib :
+
+```sh
+cd ia/sentinelx-ai
+python3 stream.py            # CAMERA_INDEX=1 si la mauvaise camera est prise
+```
+
+Visible ensuite dans le dashboard, et directement sur
+`http://127.0.0.1:8080/snapshot`.
+
+### Analyse IA (optionnelle, lourde)
+
+`main.py` ajoute YOLO et la reconnaissance faciale. Attention a l'installation :
+`ultralytics` tire PyTorch (plusieurs centaines de Mo) et `face-recognition`
+demande dlib, souvent compile depuis les sources.
+
+```sh
+pip install -r requirements.txt
+cp .env.example .env          # puis remplir MQTT_PASSWORD depuis le .env racine
+python3 main.py
+```
+
+**`MQTT_CLIENT_CERT` et `MQTT_CLIENT_KEY` doivent rester VIDES.** Le broker
+n'exige pas de certificat client (`require_certificate` n'est pas active) et
+`scripts/gen-certs.sh` ne genere pas `ia.crt`/`ia.key` : les laisser remplis
+fait echouer `tls_set()` sur un fichier introuvable.

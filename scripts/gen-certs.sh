@@ -8,8 +8,15 @@ cd "$(dirname "$0")/../certs"
 
 SERVER_IPS="${SERVER_IPS:-192.168.137.1 192.168.10.1}"
 FIRST_IP="${SERVER_IPS%% *}"
+# Chaque adresse est inscrite DEUX FOIS : en IP: et en DNS:.
+#
+# Ce n'est pas une redondance. Le moteur X.509 "minimal" de BearSSL, celui de
+# l'ESP8266, ne compare le nom attendu qu'aux entrees dNSName : il ignore
+# totalement les SAN de type iPAddress. Une connexion a "10.42.0.1" echoue donc
+# avec "Expected server name was not found in the chain" meme quand IP:10.42.0.1
+# est bien dans le certificat. Les navigateurs, eux, utilisent l'entree IP:.
 SAN=""
-for ip in $SERVER_IPS; do SAN="${SAN}IP:${ip}, "; done
+for ip in $SERVER_IPS; do SAN="${SAN}IP:${ip}, DNS:${ip}, "; done
 
 if [ -f ca.key ]; then
   echo "Des certificats existent déjà dans certs/. Pour regénérer : rm certs/*.crt certs/*.key"

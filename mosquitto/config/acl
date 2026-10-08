@@ -1,27 +1,48 @@
 # Droits par compte MQTT — groupe g02 (changer g02 partout si besoin)
+#
+# Principe : chaque compte peut écrire EXACTEMENT ce qu'il produit et lire
+# EXACTEMENT ce dont il a besoin. Personne n'a de joker en écriture.
 
-# Boîtier ESP32 : envoie mesures/alertes/état, reçoit les commandes
+# Boîtier ESP8266 : publie mesures, état, auto-test et alertes ; reçoit les
+# commandes. Il est le SEUL à lire cmd, donc personne d'autre ne peut
+# collecter les réponses d'authentification de maintenance.
 user esp32
 topic write sentinelx/g02/telemetry
+topic write sentinelx/g02/state
+topic write sentinelx/g02/test
+topic write sentinelx/g02/testmeta
 topic write sentinelx/g02/alerts
 topic write sentinelx/g02/status
 topic read  sentinelx/g02/cmd
+topic read  sentinelx/g02/vision
 
-# Script IA (webcam) : envoie seulement des alertes
+# Script IA (webcam + prédictif) : lit les mesures, envoie des alertes.
+# Volontairement SANS accès à cmd : l'IA observe et signale, elle ne pilote pas.
 user ia
+topic read  sentinelx/g02/telemetry
+# (les commentaires doivent etre sur leur propre ligne : Mosquitto prend
+#  tout le reste de la ligne comme faisant partie du topic)
+# Lecture de l'etat : sert a declencher un instantane aux evenements.
+topic read  sentinelx/g02/state
 topic write sentinelx/g02/alerts
+# Ce que la camera VOIT : visage connu / inconnu / rien. C'est un capteur de
+# plus pour le boitier, pas une telecommande - l'IA n'a toujours aucun acces a
+# cmd, donc elle ne peut ni armer, ni desarmer, ni piloter les sorties.
+topic write sentinelx/g02/vision
 
-# API : lit tout le projet, envoie les commandes
+# API : lit tout le projet, envoie les commandes.
 user api
 topic read  sentinelx/g02/#
 topic write sentinelx/g02/cmd
-topic write sentinelx/g02/alerts  
+topic write sentinelx/g02/alerts
 
-# Dashboard web : lit tout le projet, envoie les commandes
+# Dashboard web : lit tout le projet, envoie les commandes.
+# C'est l'interface humaine : c'est elle qui demande la maintenance, pilote
+# les sorties et lance l'auto-test — toujours via cmd, jamais directement.
 user dashboard
 topic read  sentinelx/g02/#
 topic write sentinelx/g02/cmd
 
-# Admin (tests, MQTT Explorer) : accès complet
+# Admin (tests, MQTT Explorer) : accès complet.
 user admin
 topic readwrite #

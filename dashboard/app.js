@@ -24,6 +24,9 @@ const CFG = {
 };
 const T = {
   telemetry: `sentinelx/${CFG.group}/telemetry`,
+  state:     `sentinelx/${CFG.group}/state`,       // état complet, retenu
+  test:      `sentinelx/${CFG.group}/test`,        // avancement de l'auto-test
+  testmeta:  `sentinelx/${CFG.group}/testmeta`,    // liste des étapes
   alerts:    `sentinelx/${CFG.group}/alerts`,
   status:    `sentinelx/${CFG.group}/status`,
   cmd:       `sentinelx/${CFG.group}/cmd`,
@@ -268,6 +271,9 @@ function onStatus(raw, retained) {
 
 function route(topic, payload, retained) {
   if (topic === T.telemetry) onTelemetry(payload);
+  else if (topic === T.state) onState(payload);
+  else if (topic === T.test) onTest(payload);
+  else if (topic === T.testmeta) onTestMeta(payload);
   else if (topic === T.alerts) onAlert(payload);
   else if (topic === T.status) onStatus(payload, retained);
 }
@@ -285,18 +291,6 @@ setInterval(() => {
   pill('pillBox', offline ? 'Boîtier : hors ligne' : 'Boîtier : en ligne', offline ? 'crit' : 'ok');
   pill('pillLast', state.lastSeen ? `Dernière mesure : il y a ${Math.round(age / 1000)} s` : 'Dernière mesure : —', fresh ? '' : 'warn');
 }, 1000);
-
-/* ===================== Commandes ===================== */
-document.querySelectorAll('[data-cmd]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const payload = btn.dataset.cmd;
-    if (state.sim) { log('info', 'COMMANDE', `${payload} (simulation, non envoyée)`); toast('Simulation : commande non envoyée'); return; }
-    if (!state.connected) { toast('Non connecté au broker'); return; }
-    state.client.publish(T.cmd, payload);
-    log('info', 'COMMANDE', payload);
-    toast('Commande envoyée au boîtier');
-  });
-});
 
 /* ===================== Webcam (flux MJPEG de l'IA) ===================== */
 function startCam() {
@@ -400,6 +394,480 @@ $('demoBtn').onclick = () => {
     }), false);
     if (k === 85) route(T.alerts, JSON.stringify({ type: 'anomalie', niveau: 'critique', msg: 'Corrélation hausse température + gaz (Isolation Forest)' }), false);
     if (pir && Math.random() < 0.3) route(T.alerts, JSON.stringify({ type: 'intrus', niveau: 'attention', conf: 0.87 }), false);
+    // Un état cohérent, pour que toute l'interface soit démontrable sans boîtier.
+    const st = k > 95 ? 'alarm' : k > 88 ? 'entry' : pres >= 6 ? 'armed' : 'armed';
+    const led = st === 'alarm' ? [0, 0, 3] : st === 'entry' ? [0, 3, 0]
+              : pres >= 6 ? [0, 2, 0] : [1, 0, 0];
+    route(T.state, JSON.stringify({
+      st, left: st === 'entry' ? 95 - k + 25 : st === 'alarm' ? 120 - k : 0,
+      cause: st === 'alarm' ? 'EXERCICE : alarme simulee'
+           : st === 'entry' ? 'Mouvement confirme (PIR)' : '',
+      warn: pres >= 6, warnWhy: pres >= 6 ? `Presence WiFi inhabituelle (+${pres - 3} appareils)` : '',
+      alarms: k > 95 ? 1 : 0, healthy: true,
+      led, buzz: st === 'alarm' ? 4 : st === 'entry' ? 6 : 0,
+      maint: { on: false, nonce: 'simulation', usable: false, locked: 0, fails: 0, grants: 0, denials: 0 },
+      manual: false, manLed: [false, false, false], manBuzz: false, forced: -1,
+      muted: false, hasBuzzer: true, dhtOk: true, pirRaw: pir, pirOk: !!pir, pirWarm: 0,
+      gas: { raw: Math.round(g), v: g * 3.3 / 1023 * 2, base: 1.3, delta: 0.02, rise: 0.01,
+             warn: false, crit: false, fast: false, ceil: 6.6, warming: false },
+      imu: { ok: true, who: 112, tilt: 0.4, shock: 0.01, spin: 0, tamper: false, ref: true, warnDeg: 8 },
+      pres: { n: pres, rnd: Math.max(0, pres - 1), stable: Math.min(1, pres), rssi: -58,
+              amb: 3.0, excess: pres - 3, streak: pres >= 6 ? 2 : 0, windows: 9,
+              learn: false, warn: pres >= 6, on: true, next: 40, frames: pres * 7 },
+      test: false, heap: 33000, up: k * 2, rssi: -61, drops: 0, build: 'simulation'
+    }), false);
     if (k > 120) { k = 0; t = 23.5; g = 210; }
   }, 2000);
 };
+
+/* =====================================================================
+ * État du boîtier, commandes, maintenance et auto-test
+ *
+ * Le boîtier n'héberge plus de page : il publie son état sur MQTT et
+ * reçoit ses ordres sur le topic cmd. Tout ce qui suit parle ce langage.
+ * ===================================================================== */
+
+const BOX = { state: null, test: null, meta: null };
+
+/* ---------- envoi d'une commande ---------- */
+function cmd(obj) {
+  if (state.sim) { log('info', 'COMMANDE', `${JSON.stringify(obj)} (simulation)`); return false; }
+  if (!state.connected) { toast('Non connecté au broker'); return false; }
+  state.client.publish(T.cmd, JSON.stringify(obj));
+  return true;
+}
+
+/* ---------- maintenance : preuve du code sans jamais l'envoyer ----------
+ *
+ * Le boîtier publie un nonce aléatoire ; on renvoie sha256(nonce + ":" + code).
+ * Le code ne quitte donc jamais le navigateur, et le nonce étant à usage
+ * unique, rejouer une réponse interceptée ne sert à rien.
+ *
+ * crypto.subtle n'existe qu'en contexte sécurisé : le dashboard doit être
+ * servi en HTTPS (c'est le cas via nginx). En HTTP simple, on le dit au lieu
+ * d'échouer silencieusement.
+ */
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+$('maintForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const pin = $('maintPin').value;
+  $('maintPin').value = '';                       // jamais conservé
+  if (!BOX.state) { toast('État du boîtier inconnu'); return; }
+  if (BOX.state.maint && BOX.state.maint.on) { cmd({ maint: 'off' }); return; }
+  if (!window.isSecureContext || !crypto.subtle) {
+    toast('Maintenance impossible en HTTP : ouvrez le dashboard en HTTPS');
+    return;
+  }
+  if (!pin) { toast('Entrez le code'); return; }
+  const nonce = BOX.state.maint ? BOX.state.maint.nonce : '';
+  if (!nonce) { toast('Pas de défi reçu du boîtier'); return; }
+  cmd({ maint: await sha256hex(`${nonce}:${pin}`) });
+});
+
+$('armBtn').onclick = () => cmd({ arm: 'now' });
+
+/* ---------- boutons de pilotage ---------- */
+for (const b of $('segMode').querySelectorAll('[data-mode]')) b.onclick = () => cmd({ mode: b.dataset.mode });
+for (const b of $('segForce').querySelectorAll('[data-force]')) b.onclick = () => cmd({ force: b.dataset.force });
+for (const b of document.querySelectorAll('[data-led]')) {
+  b.onclick = () => {
+    const i = { vert: 0, jaune: 1, rouge: 2 }[b.dataset.led];
+    const on = BOX.state && BOX.state.manLed ? BOX.state.manLed[i] : false;
+    cmd({ [b.dataset.led]: on ? 0 : 1 });
+  };
+}
+for (const b of document.querySelectorAll('[data-drill]')) {
+  b.onclick = () => { if (cmd({ drill: b.dataset.drill })) toast('Exercice lancé'); };
+}
+for (const b of document.querySelectorAll('[data-rebase]')) {
+  b.onclick = () => { if (cmd({ rebase: b.dataset.rebase })) toast('Référence reprise'); };
+}
+$('bzToggle').onclick = () => cmd({ buzzer: BOX.state && BOX.state.manBuzz ? 0 : 1 });
+$('bzBeep').onclick   = () => cmd({ beep: 300 });
+$('allOff').onclick   = () => cmd({ alloff: 1 });
+$('muteBtn').onclick  = () => cmd({ mute: BOX.state && BOX.state.muted ? 0 : 1 });
+$('sniffBtn').onclick = () => cmd({ sniff: BOX.state && BOX.state.pres && BOX.state.pres.on ? 0 : 1 });
+
+/* ---------- auto-test ---------- */
+const tCmd = (action, extra = {}) => cmd(Object.assign({ test: action }, extra));
+$('tStart').onclick = () => tCmd('start');
+$('tPause').onclick = () => tCmd('toggle');
+$('tStop').onclick  = () => tCmd('stop');
+$('tPrev').onclick  = () => tCmd('prev');
+$('tNext').onclick  = () => tCmd('next');
+$('tLoop').onclick  = () => tCmd('loop', { flag: BOX.test && BOX.test.loop ? 0 : 1 });
+$('tWait').onclick  = () => tCmd('wait', { flag: BOX.test && BOX.test.wait ? 0 : 1 });
+$('tYes').onclick   = () => BOX.test && tCmd('confirm', { step: BOX.test.step, flag: 1 });
+$('tNo').onclick    = () => BOX.test && tCmd('confirm', { step: BOX.test.step, flag: 0 });
+$('tList').addEventListener('click', (e) => {
+  const yn = e.target.closest('button[data-c]');
+  if (yn) { tCmd('confirm', { step: +yn.dataset.c, flag: +yn.dataset.ok }); return; }
+  const li = e.target.closest('li');
+  if (li) tCmd('goto', { step: +li.dataset.i });
+});
+
+/* ---------- rendu de l'état ---------- */
+const ST_LABEL = { armed: 'ARMÉ', exit: 'SORTIE EN COURS', entry: 'INTRUSION — IDENTIFIEZ-VOUS',
+                   alarm: 'ALARME', maintenance: 'MAINTENANCE' };
+const press = (el, on) => el.setAttribute('aria-pressed', on ? 'true' : 'false');
+
+function onState(raw) {
+  let d; try { d = JSON.parse(raw); } catch { return; }
+  BOX.state = d;
+  state.lastSeen = Date.now();
+
+  $('stateBar').dataset.st = d.st;
+  $('stName').textContent = ST_LABEL[d.st] || d.st;
+  const cnt = $('stCount');
+  cnt.hidden = !d.left;
+  cnt.textContent = d.left ? `${d.left} s` : '';
+  $('stWhy').textContent = d.warn && d.warnWhy ? d.warnWhy
+    : d.cause ? d.cause
+    : d.healthy ? 'Aucune anomalie.' : 'En service, mais un capteur ne répond pas.';
+
+  // Les voyants reprennent le rythme réel, pas un niveau échantillonné.
+  [['bG', 0], ['bY', 1], ['bR', 2]].forEach(([id, i]) => {
+    const el = $(id);
+    el.className = `bulb ${'gyr'[i]} p${d.led[i]}` + (d.led[i] ? ' on' : '');
+  });
+  $('bZ').className = `spk p${d.buzz}` + (d.buzz ? ' on' : '');
+  $('bZt').textContent = !d.hasBuzzer ? 'absent'
+    : { 0: 'silencieux', 1: 'actif', 4: 'alarme', 5: 'chirp', 6: 'décompte' }[d.buzz] || '—';
+
+  // Maintenance
+  const m = d.maint || {};
+  const open = !!m.on;
+  $('maintTag').textContent = open ? 'déverrouillé' : m.locked ? `verrouillé ${m.locked}s` : 'verrouillé';
+  $('maintTag').className = 'tag ' + (open ? 'open' : 'lock');
+  $('maintBtn').textContent = open ? 'Verrouiller' : 'Déverrouiller';
+  $('maintPin').hidden = open;
+  $('maintPin').disabled = open || !!m.locked;
+  $('unlocked').hidden = !open;
+  $('testPanel').hidden = !open;
+  $('maintHint').textContent = !m.usable
+    ? "Aucun code n'est configuré sur le boîtier : la maintenance à distance est refusée (MAINT_PIN dans secrets.h)."
+    : m.locked ? `Trop d'essais : réessayez dans ${m.locked} s.`
+    : open ? "Les alarmes sont coupées et les commandes acceptées. Le boîtier se ré-arme seul."
+    : "Le boîtier refuse toute commande tant qu'il n'est pas en maintenance.";
+
+  // Pilotage
+  for (const b of $('segMode').querySelectorAll('[data-mode]')) {
+    press(b, (b.dataset.mode === 'manual') === !!d.manual);
+  }
+  const fname = { '-1': 'none', 1: 'armed', 2: 'entry', 3: 'alarm' }[String(d.forced)] || 'none';
+  for (const b of $('segForce').querySelectorAll('[data-force]')) press(b, b.dataset.force === fname);
+  document.querySelectorAll('[data-led]').forEach((b) => {
+    press(b, !!(d.manLed && d.manLed[{ vert: 0, jaune: 1, rouge: 2 }[b.dataset.led]]));
+  });
+  press($('bzToggle'), !!d.manBuzz);
+  press($('muteBtn'), !!d.muted);
+  press($('sniffBtn'), !!(d.pres && d.pres.on));
+
+  // Tuiles
+  if (d.imu && d.imu.ok) {
+    $('vTamper').textContent = d.imu.tilt == null ? '—' : d.imu.tilt.toFixed(1);
+    $('sTamper').textContent = d.imu.ref
+      ? `seuil ${d.imu.warnDeg}° · choc ${d.imu.shock == null ? '—' : d.imu.shock.toFixed(2)} g`
+      : 'référence en cours';
+    setTile('tileTamper', d.imu.tamper ? 'crit' : 'ok');
+  } else {
+    $('vTamper').textContent = '—';
+    $('sTamper').textContent = 'MPU-6500 absent';
+    setTile('tileTamper', 'warn');
+  }
+
+  if (d.pres) {
+    $('vPres').textContent = d.pres.n;
+    $('sPres').textContent = d.pres.learn
+      ? `apprentissage ${d.pres.windows}/5`
+      : `habituel ${d.pres.ambient != null ? d.pres.ambient.toFixed(1) : (d.pres.amb || 0).toFixed(1)} · écart ${(d.pres.excess >= 0 ? '+' : '')}${d.pres.excess.toFixed(1)}`;
+    setTile('tilePres', d.pres.warn ? 'warn' : 'ok');
+  } else {
+    $('vPres').textContent = '—';
+    $('sPres').textContent = 'sniffer désactivé';
+  }
+
+  if (d.gas) {
+    $('sGaz').textContent = d.gas.warming
+      ? `${d.gas.v.toFixed(2)} V · préchauffage`
+      : `${d.gas.v.toFixed(2)} V · écart ${(d.gas.delta >= 0 ? '+' : '')}${(d.gas.delta || 0).toFixed(2)} V · marge ${(d.gas.ceil - d.gas.base).toFixed(2)} V`;
+    setTile('tileGaz', d.gas.crit || d.gas.fast ? 'crit' : d.gas.warn ? 'warn' : 'ok');
+  }
+  if (!d.dhtOk) { setTile('tileTemp', 'warn'); $('sTemp').textContent = 'DHT22 — aucune réponse'; }
+}
+
+/* ---------- auto-test : rendu ---------- */
+const RES = ['', 'running', 'pass', 'fail', 'info', 'look', 'skip'];
+const RLBL = ['—', 'EN COURS', 'OK', 'ÉCHEC', 'INFO', 'À VÉRIFIER', 'SAUTÉ'];
+let lastSteps = '';
+
+function onTestMeta(raw) { try { BOX.meta = JSON.parse(raw); paintTest(); } catch {} }
+function onTest(raw) { try { BOX.test = JSON.parse(raw); paintTest(); } catch {} }
+
+function paintTest() {
+  const t = BOX.test, M = BOX.meta;
+  if (!t || !M) return;
+  const S = M.steps, i = t.step, st = S[i] || {};
+
+  $('tStart').textContent = t.active ? 'Redémarrer' : 'Démarrer';
+  $('tPause').textContent = t.paused ? 'Reprendre' : 'Pause';
+  for (const id of ['tPause', 'tStop', 'tPrev', 'tNext']) $(id).disabled = !t.active;
+  press($('tLoop'), t.loop); press($('tWait'), t.wait);
+
+  const frac = t.active ? Math.min(1, t.elapsed / Math.max(1, t.dur)) : 0;
+  $('tBar').style.width = (t.active ? (i + frac) / t.total * 100 : t.done ? 100 : 0) + '%';
+  $('tPos').textContent = t.active ? `Étape ${i + 1} sur ${t.total}${t.loop ? ` · passe ${t.passes + 1}` : ''}`
+    : t.done ? 'Terminé' : 'Inactif';
+  $('tName').textContent = t.active ? st.n : (t.done ? `${t.passes} passe(s) terminée(s)` : 'Appuyez sur Démarrer');
+  $('tHint').textContent = t.active ? st.h : '';
+  $('tLeft').textContent = !t.active ? '' : t.paused ? 'En pause'
+    : t.hold ? 'En attente de votre réponse…'
+    : `${Math.max(0, (t.dur - t.elapsed) / 1000).toFixed(1)} s restantes`;
+  $('tAsk').hidden = !(t.active && st.v && (t.res[i] === 1 || t.res[i] === 5));
+
+  const c = [0, 0, 0, 0, 0, 0, 0];
+  t.res.forEach((r) => c[r]++);
+  $('tSum').innerHTML = (c[2] ? `<span class="chip pass">${c[2]} OK</span>` : '')
+    + (c[3] ? `<span class="chip fail">${c[3]} échec</span>` : '')
+    + (c[5] ? `<span class="chip look">${c[5]} à vérifier</span>` : '')
+    + (c[6] ? `<span class="chip">${c[6]} sauté</span>` : '');
+
+  // Reconstruit seulement si quelque chose a changé : sinon un clic peut être
+  // perdu parce que la liste est remplacée sous le doigt.
+  let h = '';
+  S.forEach((x, k) => {
+    const r = t.res[k];
+    h += `<li data-i="${k}" class="${t.active && k === i ? 'cur' : ''}">`
+      + `<span class="chip ${RES[r]}">${RLBL[r]}</span>`
+      + `<span><b>${k + 1}. ${esc(x.n)}</b><small>${esc(t.det[k] || x.h)}</small></span>`
+      + (x.v && r === 5 ? `<span class="yn"><button class="btn yes" data-c="${k}" data-ok="1">Oui</button>`
+          + `<button class="btn no" data-c="${k}" data-ok="0">Non</button></span>` : '<span></span>')
+      + '</li>';
+  });
+  if (h !== lastSteps) { $('tList').innerHTML = h; lastSteps = h; }
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+/* =====================================================================
+ * Reconnaissance faciale : personnes autorisées et captures
+ *
+ * Le service vision expose son API derrière /video/ (proxifié par nginx).
+ * L'ajout et la suppression sont réservés à la maintenance : décider qui est
+ * autorisé est un contrôle de sécurité, pas un réglage d'affichage.
+ * ===================================================================== */
+
+const VAPI = '/video/api';
+let faceBusy = false;
+
+function maintOpen() {
+  return !!(BOX.state && BOX.state.maint && BOX.state.maint.on);
+}
+
+async function vget(path) {
+  const r = await fetch(VAPI + path, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+/* ---------- personnes autorisées ---------- */
+async function loadPeople() {
+  const ul = $('people');
+  try {
+    const { people } = await vget('/faces');
+    $('faceTag').textContent = people.length
+      ? `${people.length} autorisée${people.length > 1 ? 's' : ''}` : 'aucune';
+    $('faceTag').className = 'tag' + (people.length ? ' ok' : '');
+    ul.innerHTML = people.length ? people.map((p) => `
+      <li>
+        <img src="${VAPI}/faces/thumb?id=${encodeURIComponent(p.id)}" alt="" loading="lazy">
+        <span class="nm">${esc(p.name)}</span>
+        <span class="meta">${p.samples} vue${p.samples > 1 ? 's' : ''}</span>
+        <button class="btn danger" data-del="${esc(p.id)}" ${maintOpen() ? '' : 'disabled'}>Retirer</button>
+      </li>`).join('')
+      : '<li class="empty">Personne enregistrée. Tout visage sera signalé comme inconnu.</li>';
+  } catch (e) {
+    $('faceTag').textContent = 'service hors ligne';
+    $('faceTag').className = 'tag lock';
+    ul.innerHTML = '<li class="empty">Service vision injoignable (conteneur « stream » démarré ?)</li>';
+  }
+}
+
+$('faceForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (faceBusy) return;
+  if (!maintOpen()) { toast('Passez en maintenance pour modifier les autorisations'); return; }
+  const name = $('faceName').value.trim();
+  if (!name) { toast('Entrez un nom'); return; }
+
+  faceBusy = true;
+  $('faceAdd').disabled = true;
+  $('faceAdd').textContent = 'Lecture du visage…';
+  try {
+    const r = await fetch(`${VAPI}/faces?name=${encodeURIComponent(name)}`, { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok || j.ok === false) { toast(j.err || `Échec (HTTP ${r.status})`); }
+    else { toast(`${name} enregistré`); $('faceName').value = ''; loadPeople(); }
+  } catch (err) {
+    toast('Service vision injoignable');
+  } finally {
+    faceBusy = false;
+    $('faceAdd').disabled = false;
+    $('faceAdd').textContent = 'Enregistrer le visage';
+  }
+});
+
+$('people').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-del]');
+  if (!b) return;
+  if (!maintOpen()) { toast('Passez en maintenance pour modifier les autorisations'); return; }
+  const li = b.closest('li');
+  const who = li ? li.querySelector('.nm').textContent : 'cette personne';
+  if (!confirm(`Retirer ${who} des personnes autorisées ?`)) return;
+  try {
+    const r = await fetch(`${VAPI}/faces?id=${encodeURIComponent(b.dataset.del)}`, { method: 'DELETE' });
+    if (r.ok) { toast('Retiré'); loadPeople(); } else { toast('Échec de la suppression'); }
+  } catch { toast('Service vision injoignable'); }
+});
+
+/* ---------- captures ---------- */
+const SHOT_LABEL = { detection: 'détection', alarme: 'ALARME',
+                     identification: 'identifié', 'visage-inconnu': 'inconnu' };
+
+async function loadShots() {
+  const box = $('shots');
+  try {
+    const { events } = await vget('/events');
+    $('shotTag').textContent = events.length ? `${events.length}` : 'aucune';
+    box.innerHTML = events.length ? events.map((ev) => {
+      const t = new Date(ev.ts * 1000).toLocaleTimeString('fr-FR', { hour12: false });
+      return `<figure class="${esc(ev.reason)}" data-file="${esc(ev.file)}" data-detail="${esc(ev.detail || '')}" data-t="${t}">
+          <img src="${VAPI}/events/img?file=${encodeURIComponent(ev.file)}" alt="" loading="lazy">
+          <figcaption>${SHOT_LABEL[ev.reason] || esc(ev.reason)} ${t}</figcaption>
+        </figure>`;
+    }).join('') : '<p class="empty">Aucune capture.</p>';
+  } catch {
+    $('shotTag').textContent = 'hors ligne';
+    box.innerHTML = '<p class="empty">Service vision injoignable.</p>';
+  }
+}
+
+$('shots').addEventListener('click', (e) => {
+  const fig = e.target.closest('figure');
+  if (!fig) return;
+  const box = document.createElement('div');
+  box.id = 'lightbox';
+  box.innerHTML = `<div><img src="${VAPI}/events/img?file=${encodeURIComponent(fig.dataset.file)}" alt="">
+      <p>${esc(fig.dataset.t)} — ${esc(fig.dataset.detail || fig.className)}</p></div>`;
+  box.onclick = () => box.remove();
+  document.body.appendChild(box);
+});
+
+// Rafraîchissement : les personnes changent rarement, les captures souvent.
+setInterval(() => { if (!$('app').hidden) loadShots(); }, 5000);
+setInterval(() => { if (!$('app').hidden) loadPeople(); }, 15000);
+loadPeople(); loadShots();
+
+/* =====================================================================
+ * Réglages de la caméra — appliqués à chaud
+ *
+ * Évite d'avoir à rebuilder l'image ou éditer un fichier pour ajuster un
+ * seuil : tout se règle ici, et prend effet immédiatement.
+ * ===================================================================== */
+
+const CFG_META = {
+  detect_confidence: {
+    label: 'Seuil de détection',
+    why: "À partir de quand une forme est considérée comme un visage. Trop haut : les profils et les visages mal éclairés sont manqués. Trop bas : n'importe quelle forme passe pour un visage.",
+    step: 0.01,
+  },
+  match_threshold: {
+    label: 'Seuil de reconnaissance',
+    why: "À partir de quand un visage est reconnu comme une personne enregistrée. Trop bas : des inconnus passent pour autorisés.",
+    step: 0.005,
+  },
+  known_grace_seconds: {
+    label: 'Délai de grâce',
+    why: "Une fois reconnue, une personne reste considérée présente pendant ce temps même si elle tourne la tête — un profil ne ressemble pas à une vue de face. À 0, chaque mouvement de tête relance un décompte d'alarme.",
+    step: 1,
+  },
+  unknown_confirm: {
+    label: 'Relevés avant « inconnu »',
+    why: "Nombre de relevés consécutifs sans visage connu avant de déclarer un inconnu. Lisse les images ratées.",
+    step: 1,
+  },
+  check_every_n: {
+    label: 'Analyser 1 image sur',
+    why: "Plus bas = plus réactif mais plus de charge processeur.",
+    step: 1,
+  },
+};
+const CFG_DEFAULTS = { detect_confidence: 0.60, match_threshold: 0.363,
+                       known_grace_seconds: 20, unknown_confirm: 3, check_every_n: 5 };
+let cfgLimits = {};
+
+async function loadSettings() {
+  const box = $('settings');
+  try {
+    const { settings, limits } = await vget('/config');
+    cfgLimits = limits;
+    const open = maintOpen();
+    $('cfgTag').textContent = open ? 'modifiable' : 'maintenance requise';
+    $('cfgTag').className = 'tag ' + (open ? 'open' : 'lock');
+    box.innerHTML = Object.entries(settings).map(([k, v]) => {
+      const m = CFG_META[k] || { label: k, why: '', step: 0.01 };
+      const [lo, hi] = limits[k] || [0, 1];
+      return `<div class="setting" data-k="${k}">
+          <label for="s-${k}">${esc(m.label)}</label>
+          <p class="why">${esc(m.why)}</p>
+          <div class="ctl">
+            <input type="range" id="s-${k}" min="${lo}" max="${hi}" step="${m.step}"
+                   value="${v}" ${open ? '' : 'disabled'}>
+            <output for="s-${k}">${v}</output>
+          </div>
+        </div>`;
+    }).join('');
+  } catch {
+    $('cfgTag').textContent = 'hors ligne';
+    $('cfgTag').className = 'tag lock';
+    box.innerHTML = '<p class="empty">Service vision injoignable.</p>';
+  }
+}
+
+let cfgTimer;
+$('settings').addEventListener('input', (e) => {
+  const inp = e.target;
+  if (inp.type !== 'range') return;
+  const card = inp.closest('.setting');
+  card.querySelector('output').textContent = inp.value;
+  card.classList.add('changed');
+  // Debounce : un glissement de curseur ne doit pas envoyer 40 requêtes.
+  clearTimeout(cfgTimer);
+  cfgTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`${VAPI}/config?${card.dataset.k}=${encodeURIComponent(inp.value)}`,
+                            { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok || j.ok === false) { toast(j.err || 'Réglage refusé'); }
+      else { card.classList.remove('changed'); toast(`${CFG_META[card.dataset.k].label} : ${inp.value}`); }
+    } catch { toast('Service vision injoignable'); }
+  }, 400);
+});
+
+$('cfgReset').onclick = async () => {
+  if (!maintOpen()) { toast('Passez en maintenance'); return; }
+  const qs = Object.entries(CFG_DEFAULTS).map(([k, v]) => `${k}=${v}`).join('&');
+  try {
+    const r = await fetch(`${VAPI}/config?${qs}`, { method: 'POST' });
+    if (r.ok) { toast('Valeurs par défaut restaurées'); loadSettings(); }
+  } catch { toast('Service vision injoignable'); }
+};
+
+setInterval(() => { if (!$('app').hidden) loadSettings(); }, 20000);
+loadSettings();

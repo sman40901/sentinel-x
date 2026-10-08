@@ -1,0 +1,516 @@
+{
+  "version": 1,
+  "author": "Sentinel-X",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-breadboard",
+      "id": "bb",
+      "top": 240,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp",
+      "top": 220,
+      "left": 840,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht",
+      "top": 20,
+      "left": 55,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir",
+      "top": 40,
+      "left": 235,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-gas-sensor",
+      "id": "gas",
+      "top": 75,
+      "left": 425,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-analog-joystick",
+      "id": "joy",
+      "top": 20,
+      "left": 640,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rPullup",
+      "top": 303.75,
+      "left": 74.2,
+      "attrs": {
+        "value": "5000"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rTop",
+      "top": 303.75,
+      "left": 400.6,
+      "attrs": {
+        "value": "5000"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rBottom",
+      "top": 313.35,
+      "left": 458.2,
+      "attrs": {
+        "value": "5000"
+      }
+    },
+    {
+      "type": "wokwi-vcc",
+      "id": "supply",
+      "top": 685,
+      "left": 550,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-gnd",
+      "id": "supplyGnd",
+      "top": 685,
+      "left": 610,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-text",
+      "id": "title",
+      "top": -100,
+      "left": 0,
+      "attrs": {
+        "text": "SENTINEL-X | follow the colours; hover a pin to see its name"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "warning",
+      "top": -65,
+      "left": 0,
+      "attrs": {
+        "text": "DHT22 / MQ2 are placeholders: verify your real sensor pinouts before powering."
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "dhtLabel",
+      "top": -20,
+      "left": 20,
+      "attrs": {
+        "text": "1 | TEMPERATURE\nDHT22 assumed"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "pirLabel",
+      "top": -10,
+      "left": 215,
+      "attrs": {
+        "text": "2 | MOTION\nHW-416A / PIR"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "gasLabel",
+      "top": 10,
+      "left": 420,
+      "attrs": {
+        "text": "3 | GAS\nFlying Fish / MQ2 assumed"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "joyLabel",
+      "top": -35,
+      "left": 635,
+      "attrs": {
+        "text": "4 | JOYSTICK\n3.3 V ONLY\n5-pin module assumed"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "espLabel",
+      "top": 145,
+      "left": 825,
+      "attrs": {
+        "text": "ESP32 DevKit V1\nUSB power + programming\nWi-Fi + BLE inside"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "topRail",
+      "top": 200,
+      "left": 0,
+      "attrs": {
+        "text": "TOP + = 3.3 V | TOP - = GND"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "bottomRail",
+      "top": 455,
+      "left": 0,
+      "attrs": {
+        "text": "BOTTOM + = external 5 V | BOTTOM - = GND"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "pullupLabel",
+      "top": 690,
+      "left": -10,
+      "attrs": {
+        "text": "R1: 5k\nc6 -> c12"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "dividerLabel",
+      "top": 690,
+      "left": 180,
+      "attrs": {
+        "text": "R2 + R3: 5k each\nc40 -> c46; d46 -> d52\nGPIO34 = column 46"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "signalLabel",
+      "top": 620,
+      "left": 300,
+      "attrs": {
+        "text": "SIGNALS: green = DHT27; light blue = PIR26; yellow = gas34\nmagenta = joystick X32; cyan = Y33; pink = button25"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "supplyLabel",
+      "top": 740,
+      "left": 460,
+      "attrs": {
+        "text": "EXTERNAL regulated 5 V supply\n+ to bottom +; - to bottom -\nNever join the two + rails or feed ESP VIN"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "legend",
+      "top": 820,
+      "left": 0,
+      "attrs": {
+        "text": "Same NUMBER: a-e joined; f-j joined separately. Centre gap is NOT connected.\nOrange = 3.3 V | red = 5 V | grey = common GND\n5k = 5000 ohms; 210R = 210 ohms. Three 5k resistors shown.\nWiring reference only: Wokwi cannot accurately simulate this analog divider."
+      }
+    }
+  ],
+  "connections": [
+    [
+      "esp:TX0",
+      "$serialMonitor:RX",
+      "",
+      []
+    ],
+    [
+      "esp:RX0",
+      "$serialMonitor:TX",
+      "",
+      []
+    ],
+    [
+      "esp:3V3",
+      "bb:tp.1",
+      "orange",
+      [
+        "h50",
+        "v290",
+        "h-945"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "bb:tn.1",
+      "gray",
+      [
+        "h70",
+        "v315",
+        "h-980"
+      ]
+    ],
+    [
+      "bb:tn.50",
+      "bb:bn.50",
+      "gray",
+      [
+        "h40"
+      ]
+    ],
+    [
+      "supply:VCC",
+      "bb:bp.45",
+      "red",
+      [
+        "v-15"
+      ]
+    ],
+    [
+      "supplyGnd:GND",
+      "bb:bn.47",
+      "gray",
+      [
+        "v-15"
+      ]
+    ],
+    [
+      "dht:VCC",
+      "bb:6t.a",
+      "orange",
+      [
+        "v40"
+      ]
+    ],
+    [
+      "bb:6t.b",
+      "bb:tp.5",
+      "orange",
+      []
+    ],
+    [
+      "dht:SDA",
+      "bb:12t.a",
+      "green",
+      [
+        "v55"
+      ]
+    ],
+    [
+      "dht:GND",
+      "bb:tn.8",
+      "gray",
+      [
+        "v25",
+        "h40"
+      ]
+    ],
+    [
+      "rPullup:1",
+      "bb:6t.c",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "rPullup:2",
+      "bb:12t.c",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "pir:VCC",
+      "bb:bp.20",
+      "red",
+      [
+        "v30",
+        "h-75",
+        "v340"
+      ]
+    ],
+    [
+      "pir:GND",
+      "bb:tn.22",
+      "gray",
+      [
+        "v30"
+      ]
+    ],
+    [
+      "pir:OUT",
+      "bb:26t.a",
+      "deepskyblue",
+      [
+        "v60"
+      ]
+    ],
+    [
+      "gas:VCC",
+      "bb:bp.40",
+      "red",
+      [
+        "h30",
+        "v340"
+      ]
+    ],
+    [
+      "gas:GND",
+      "bb:tn.42",
+      "gray",
+      [
+        "h20",
+        "v90"
+      ]
+    ],
+    [
+      "gas:AOUT",
+      "bb:40t.a",
+      "yellow",
+      [
+        "h10",
+        "v95"
+      ]
+    ],
+    [
+      "rTop:1",
+      "bb:40t.c",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "rTop:2",
+      "bb:46t.c",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "rBottom:1",
+      "bb:46t.d",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "rBottom:2",
+      "bb:52t.d",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "bb:52t.e",
+      "bb:tn.44",
+      "gray",
+      [
+        "h15"
+      ]
+    ],
+    [
+      "joy:VCC",
+      "bb:tp.48",
+      "orange",
+      [
+        "v25",
+        "h-30"
+      ]
+    ],
+    [
+      "joy:GND",
+      "bb:tn.49",
+      "gray",
+      [
+        "v40"
+      ]
+    ],
+    [
+      "joy:HORZ",
+      "bb:58t.a",
+      "magenta",
+      [
+        "v60"
+      ]
+    ],
+    [
+      "joy:VERT",
+      "bb:59t.a",
+      "cyan",
+      [
+        "v75"
+      ]
+    ],
+    [
+      "joy:SEL",
+      "bb:60t.a",
+      "pink",
+      [
+        "v90"
+      ]
+    ],
+    [
+      "esp:D27",
+      "bb:12t.e",
+      "green",
+      [
+        "h-100",
+        "v179.2",
+        "h-612.6"
+      ]
+    ],
+    [
+      "esp:D26",
+      "bb:26t.e",
+      "deepskyblue",
+      [
+        "h-85",
+        "v209",
+        "h-493.2"
+      ]
+    ],
+    [
+      "esp:D34",
+      "bb:46t.e",
+      "yellow",
+      [
+        "h-70",
+        "v276.9",
+        "h-316.2"
+      ]
+    ],
+    [
+      "esp:D32",
+      "bb:58t.e",
+      "magenta",
+      [
+        "h-55",
+        "v277.8",
+        "h-216"
+      ]
+    ],
+    [
+      "esp:D33",
+      "bb:59t.e",
+      "cyan",
+      [
+        "h-40",
+        "v288.3",
+        "h-221.4"
+      ]
+    ],
+    [
+      "esp:D25",
+      "bb:60t.e",
+      "pink",
+      [
+        "h-25",
+        "v298.7",
+        "h-226.8"
+      ]
+    ]
+  ],
+  "dependencies": {}
+}

@@ -6,3 +6,9 @@ certs/*.crt
 mosquitto/config/passwd
 firmware/**/secrets.h
 __pycache__/
+
+# Empreinte du mot de passe HTTP : jamais dans le depot.
+/nginx/htpasswd
+
+# Numero de serie genere par openssl ca : artefact, pas une source.
+certs/*.srl
