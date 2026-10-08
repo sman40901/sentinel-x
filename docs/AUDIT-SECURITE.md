@@ -105,11 +105,9 @@ camera et relire l'historique. Couvert par l'authentification nginx ci-dessus.
 
 ## 3. Limites connues, non corrigees
 
-- **Aucune detection de vivacite.** SFace compare des visages, il ne distingue
-  pas un visage d'une photo de ce visage. Une photo imprimee d'une personne
-  autorisee passera tres probablement. *Non teste faute de materiel* — mais
-  c'est inherent au modele, pas un reglage. Pour un projet d'ecole c'est
-  acceptable ; en vrai il faudrait un capteur de profondeur ou de l'infrarouge.
+- **La vivacite est maintenant verifiee** (voir la section 5), mais une VIDEO
+  rejouee sur un ecran satisfait le defi. C'est la limite de fond d'une
+  verification monoculaire sans profondeur.
 - **`{"maint":"off"}` et `{"arm":...}` ne demandent pas le code.** Ils sont dans
   le sens « on reverrouille », donc ce n'est pas une elevation de privilege.
   Mais maintenant que l'enrolement exige la maintenance, qui possede les
@@ -137,3 +135,97 @@ Authentifie mais boitier hors maintenance, les modifications doivent etre 403 :
 
     curl -sk -u dashboard:MOT_DE_PASSE -X POST \
       'https://localhost/video/api/config?match_threshold=0.1'
+
+---
+
+## 5. Detection de vivacite
+
+Ajoutee apres l'audit, en reponse directe a la limite relevee en section 3 :
+sans elle, une photo imprimee d'une personne autorisee suffisait a obtenir
+« personne validee en vue », ce qui annule toute alarme d'intrusion.
+
+### Ce qui a ete essaye, mesure, et rejete
+
+L'approche passive semblait evidente : une photo est un objet PLAN, donc son
+mouvement s'explique entierement par une transformation plane, alors que le
+relief d'un vrai visage (le nez est ~2 cm devant le plan des yeux) produit une
+parallaxe qu'aucun plan ne peut absorber. La premisse est juste — le relief
+donne 5 a 6 fois le residu d'un plan — mais elle ne survit pas au materiel :
+
+| essai | resultat mesure |
+|---|---|
+| residu affine sur les 5 points de YuNet | separe a 0.5 et 1.0 px de bruit, **chevauche completement a 2.0 px** |
+| bruit reel des points sur cette camera | **1.86 a 3.06 px** (visage de 54 px entre les yeux) — donc dans le regime qui ne separe pas |
+| ajustement par homographie | parfait sans bruit (residu exactement nul pour un plan), **inutilisable avec** : 8 degres de liberte pour 5 points, mal conditionne, une photo a sorti un residu de 2787 |
+| auto-calibration sur le bruit (fort mouvement / faible mouvement) | **chevauche a tous les niveaux de bruit** |
+| flot optique dense, fraction de points hors du plan dominant | suit le DEPLACEMENT et non la geometrie (derive de Lucas-Kanade) : une photo qu'on approche a donne **48.9 % hors-plan**, contre 8.7 % pour un vrai visage a 20 deg |
+
+Conclusion : la vivacite **passive** fiable n'est pas atteignable ici — une
+seule webcam 640x480, pas de profondeur, pas d'infrarouge, et aucun jeu
+d'attaques enregistrees pour calibrer un seuil. Pretendre le contraire aurait
+donne un faux sentiment de securite, ce qui est pire que rien.
+
+### Ce qui marche : le defi
+
+On cesse de chercher un effet subtil sous le bruit, et on EXIGE un mouvement
+ample qu'une photo ne peut pas produire : tourner la tete d'un cote puis de
+l'autre. L'indicateur est le decalage lateral du nez entre les deux yeux,
+normalise et **redresse pour etre invariant au roulis**.
+
+Cette invariance n'est pas cosmetique : la premiere version lisait les x bruts
+de l'image, et comme le nez est sous la ligne des yeux, **pencher** la photo de
+20 deg deplacait l'indicateur de 0.38 — au-dela du seuil. Il suffisait de
+bercer une feuille de papier. Apres correction, l'asymetrie est strictement
+independante du roulis (verifie de 0 a 60 deg), et un plan ne depasse jamais
+0.045 meme a 60 deg de lacet, contre 0.403 pour un visage a 30 deg.
+
+La statistique a elle aussi du etre refaite. Prendre l'amplitude entre le
+minimum et le maximum des releves etait faux : le maximum moins le minimum de
+N tirages bruites grandit avec N par pure statistique des extremes. Un visage
+**parfaitement immobile** sortait 0.304, et trois mouvements de photo passaient
+le seuil. Remplacee par une exigence d'asymetrie **soutenue** de chaque cote,
+mesuree sur une mediane glissante : un bruit centre ne peut pas la produire.
+
+### Performance mesuree, aux reglages livres
+
+Seuil +/-0.25 soutenu, mediane de 5 releves, fenetre de 5 s (calee sur le
+delai d'identification du boitier), 600 essais par case, bruit 2.5 px :
+
+| taille du visage | distance | attaques acceptees | vrai visage, 30 deg |
+|---|---|---|---|
+| 45 px | 0.84 m | 2.0 % | 93.5 % |
+| 60 px | 0.63 m | 0.3 % | 97.0 % |
+| **75 px** | **0.50 m** | **0.2 %** | **99.7 %** |
+| 110 px | 0.34 m | 0.0 % | 100 % |
+
+D'ou `min_iod_px = 75` : en dessous, on n'affirme rien, on affiche
+« approchez-vous ». C'est le seul reglage qui ameliore securite ET confort en
+meme temps, puisque le bruit de l'indicateur vaut ~2 x bruit_px / inter-oculaire.
+
+Neuf mouvements de photo ont ete joues contre le detecteur — immobile, pivotee
+jusqu'a 45 deg, penchee jusqu'a 60 deg, inclinee, translatee, approchee,
+secouee, et tout a la fois : **tous refuses**. Et en integration, sur le vrai
+pipeline, la photo d'une personne enrolee ressort `recognised = true`,
+`known = false` : reconnue, mais pas autorisee.
+
+Un reglage essaye puis abandonne, mesure a l'appui : exiger que la rotation
+tienne 3 releves consecutifs faisait passer les faux refus de 0.6 % a 6.0 %
+sans reduire les attaques — une tete qui balaye ne passe qu'un instant par ses
+extremes. Le reglage `sustain` reste disponible, a 1 par defaut.
+
+### Ce que ca n'arrete pas
+
+- **Une video rejouee sur un ecran**, montrant la personne en train de tourner
+  la tete : l'ecran est plan, mais le contenu encode un vrai mouvement 3D. Le
+  tirage au hasard du defi oblige l'attaquant a posseder la bonne sequence et a
+  la jouer au bon moment, ce qui releve la barre sans la fermer.
+- Les indicateurs de **texture** (nettete, moire d'ecran) sont calcules et
+  affiches, mais ne **decident rien** : sans vraies attaques enregistrees pour
+  les calibrer, aucun seuil ne serait honnete.
+- **Non teste sur un vrai visage humain.** Toute la chaine a ete validee sur
+  des attaques (vraies images de cette camera, warpees par de vraies
+  homographies de plan) et sur un modele geometrique pour le cote legitime.
+  Le taux de reussite d'un vrai visage reste donc une prediction, pas une
+  mesure. Le panneau « Preuve de vivacite » du dashboard affiche les chiffres
+  en direct pour le verifier en vingt secondes, et `require_liveness` repasse
+  en mesure-seule en un clic si le defi gene.

@@ -12,3 +12,7 @@ __pycache__/
 
 # Numero de serie genere par openssl ca : artefact, pas une source.
 certs/*.srl
+
+# Archive de cablage et son extraction : doublon de hardware/wokwi/.
+/hardware/sentinel-x-wiring.zip
+/hardware/sentinel-x-wiring/

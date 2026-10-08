@@ -35,7 +35,7 @@ RUN mkdir -p /models \
  && echo "modeles ok: $(du -sh /models | cut -f1)"
 
 WORKDIR /app
-COPY store.py vision.py app.py ./
+COPY store.py liveness.py vision.py app.py ./
 
 EXPOSE 8080
 CMD ["python3", "-u", "app.py"]

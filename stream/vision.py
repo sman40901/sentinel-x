@@ -16,6 +16,9 @@ import time
 import cv2
 import numpy as np
 
+import liveness as liveness_mod
+from liveness import Liveness
+
 CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
 WIDTH = int(os.getenv("FRAME_WIDTH", "640"))
 HEIGHT = int(os.getenv("FRAME_HEIGHT", "480"))
@@ -74,10 +77,20 @@ WATCHDOG_SECONDS = float(os.getenv("CAMERA_WATCHDOG_SECONDS", "5"))
 
 
 class Face:
-    __slots__ = ("box", "name", "score", "known")
+    # recognised : l'empreinte correspond a une personne enregistree.
+    # known      : ...ET la vivacite est confirmee, quand on l'exige.
+    #
+    # Les deux sont distincts exprès. C'est "known" qui dit au boitier
+    # "personne autorisee en vue, n'alarme pas" ; une photo tendue devant la
+    # camera est "recognised" mais ne doit jamais etre "known".
+    __slots__ = ("box", "name", "score", "known", "recognised", "live",
+                 "prompt", "live_detail")
 
-    def __init__(self, box, name, score, known):
-        self.box, self.name, self.score, self.known = box, name, score, known
+    def __init__(self, box, name, score, recognised, known, live,
+                 prompt="", live_detail=None):
+        self.box, self.name, self.score = box, name, score
+        self.recognised, self.known, self.live = recognised, known, live
+        self.prompt, self.live_detail = prompt, live_detail or {}
 
 
 class Vision:
@@ -98,6 +111,8 @@ class Vision:
         self.running = True
         self.last_frame_ms = 0.0     # chien de garde : derniere lecture reussie
         self.reopens = 0
+
+        self.liveness = Liveness()
 
         self.detector = cv2.FaceDetectorYN.create(
             DETECTOR, "", (WIDTH, HEIGHT), DETECT_CONF, 0.3, 5000)
@@ -196,8 +211,15 @@ class Vision:
         _, raw = self.detector.detect(frame)
         if raw is None:
             return []
+
+        # Suivi de vivacite d'abord : il faut une piste par detection, dans le
+        # MEME ordre, pour pouvoir les apparier ensuite par indice.
+        now = time.time()
+        tracks = self.liveness.update(frame, raw)
+
+        require = bool(liveness_mod.SETTINGS["require_liveness"])
         out = []
-        for det in raw:
+        for i, det in enumerate(raw):
             try:
                 # alignCrop redresse le visage avant l'empreinte : sans ca, une
                 # tete penchee ne ressemble plus a elle-meme.
@@ -207,18 +229,53 @@ class Vision:
                 continue
             name, score = self.store.match(emb, SETTINGS["match_threshold"])
             box = tuple(int(v) for v in det[:4])
-            out.append(Face(box, name or "Inconnu", score, name is not None))
+            track = tracks[i] if i < len(tracks) else None
+            live = bool(track and track.is_live(now))
+
+            recognised = name is not None
+            # LA porte : sans vivacite confirmee, une correspondance ne vaut
+            # pas une autorisation. Une photo de la bonne personne s'arrete
+            # ici.
+            known = recognised and (live or not require)
+
+            prompt = ""
+            if track is not None and recognised and not live and require:
+                if track.too_far:
+                    prompt = "Approchez-vous de la camera"
+                elif track.challenge is not None:
+                    prompt = track.challenge.prompt
+            out.append(Face(box, name or "Inconnu", score, recognised, known,
+                            live, prompt,
+                            track.detail(now) if track is not None else None))
         return out
 
     def _annotate(self, frame, faces):
         for f in faces:
             x, y, bw, bh = f.box
-            colour = (80, 200, 120) if f.known else (80, 80, 240)   # BGR
+            if f.known:
+                colour = (80, 200, 120)        # vert : autorise
+            elif f.recognised:
+                colour = (60, 190, 240)        # orange : reconnu, vivacite a prouver
+            else:
+                colour = (80, 80, 240)         # rouge : inconnu
             cv2.rectangle(frame, (x, y), (x + bw, y + bh), colour, 2)
-            label = f"{f.name} {f.score:.2f}" if f.known else "Inconnu"
+            if f.known:
+                label = f"{f.name} {f.score:.2f}"
+            elif f.recognised:
+                label = f"{f.name} ? vivacite"
+            else:
+                label = "Inconnu"
             cv2.rectangle(frame, (x, y - 20), (x + max(90, bw), y), colour, -1)
             cv2.putText(frame, label, (x + 4, y - 6),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (20, 20, 20), 1, cv2.LINE_AA)
+            # La consigne du defi, SUR l'image : la personne regarde la camera,
+            # pas le dashboard.
+            if f.prompt:
+                cv2.rectangle(frame, (x, y + bh), (x + max(240, bw), y + bh + 24),
+                              (30, 30, 30), -1)
+                cv2.putText(frame, f.prompt, (x + 5, y + bh + 17),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (240, 240, 240), 1,
+                            cv2.LINE_AA)
         return frame
 
     # --- lectures ----------------------------------------------------------
@@ -235,10 +292,36 @@ class Vision:
         with self.lock:
             return list(self.faces)
 
+    def current_prompt(self):
+        """La consigne a afficher, s'il y en a une."""
+        with self.lock:
+            for f in self.faces:
+                if f.prompt:
+                    return f.prompt
+        return ""
+
+    def liveness_state(self):
+        now = time.time()
+        return {
+            "settings": dict(liveness_mod.SETTINGS),
+            "limits": {k: list(v) for k, v in liveness_mod.LIMITS.items()},
+            "prompt": self.current_prompt(),
+            "tracks": [t.detail(now) for t in self.liveness.tracks],
+        }
+
+    def reset_liveness(self):
+        """Redonne un defi a tout le monde."""
+        self.liveness.reset_all()
+
     def apply_settings(self, changes):
         """Applique des reglages a chaud. Renvoie (appliques, erreurs)."""
-        applied, errors = {}, {}
-        for k, v in changes.items():
+        # Les reglages de vivacite vivent dans leur module : on les y renvoie
+        # plutot que de dupliquer des bornes qui finiraient par divergier.
+        mine = {k: v for k, v in changes.items() if k not in liveness_mod.SETTINGS}
+        theirs = {k: v for k, v in changes.items() if k in liveness_mod.SETTINGS}
+        applied, errors = liveness_mod.apply_settings(theirs) if theirs else ({}, {})
+
+        for k, v in mine.items():
             if k not in SETTINGS:
                 errors[k] = "reglage inconnu"
                 continue
@@ -260,7 +343,10 @@ class Vision:
 
     def status(self):
         with self.lock:
-            faces = [{"name": f.name, "known": f.known, "score": round(f.score, 3)}
+            faces = [{"name": f.name, "known": f.known,
+                      "recognised": f.recognised, "live": f.live,
+                      "prompt": f.prompt, "liveness": f.live_detail,
+                      "score": round(f.score, 3)}
                      for f in self.faces]
         stale = time.time() - self.last_frame_ms if self.last_frame_ms else None
         return {
@@ -269,6 +355,7 @@ class Vision:
             "frames": self.frames,
             "faces": faces,
             "settings": dict(SETTINGS),
+            "liveness": dict(liveness_mod.SETTINGS),
             "stale_seconds": round(stale, 1) if stale is not None else None,
             "reopens": self.reopens,
         }
@@ -299,6 +386,16 @@ class Vision:
             return None, "aucun visage detecte - placez-vous face a la camera"
         if len(raw) > 1:
             return None, f"{len(raw)} visages dans le champ - une seule personne a la fois"
+
+        # On n'enregistre pas une photo. Sans cette garde, un attaquant ayant
+        # obtenu la maintenance pourrait enroler l'image imprimee de quelqu'un
+        # d'autre, et le modele garderait pour toujours une empreinte qu'une
+        # simple feuille de papier rejoue.
+        if liveness_mod.SETTINGS["require_liveness"]:
+            live = [t for t in self.liveness.tracks if t.is_live(time.time())]
+            if not live:
+                return None, ("vivacite non confirmee - "
+                              + (self.current_prompt() or "tournez la tete"))
 
         det = raw[0]
         aligned = self.recognizer.alignCrop(frame, det)

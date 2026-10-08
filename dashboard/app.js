@@ -807,6 +807,41 @@ const CFG_META = {
     why: "Plus bas = plus réactif mais plus de charge processeur.",
     step: 1,
   },
+  require_liveness: {
+    label: 'Exiger la preuve de vivacité',
+    why: "À 1, un visage reconnu ne vaut autorisation qu'après avoir tourné la tête : une photo imprimée de la bonne personne est refusée. À 0, la vivacité est seulement mesurée et affichée, sans rien bloquer — à utiliser si le défi gêne une démonstration.",
+    step: 1,
+  },
+  turn_required: {
+    label: 'Amplitude de rotation exigée',
+    why: "Asymétrie du nez à atteindre de chaque côté. Mesuré : une photo qu'on agite plafonne vers 0,13 ; un vrai visage tourné de 30° atteint 0,40. Descendre sous 0,20 laisse passer des photos.",
+    step: 0.01,
+  },
+  challenge_seconds: {
+    label: 'Temps pour le défi',
+    why: "Durée accordée pour tourner la tête. Doit rester ≤ au délai d'identification du boîtier (5 s), sinon l'alarme sonne pendant que la personne obéit encore.",
+    step: 0.5,
+  },
+  hold_seconds: {
+    label: 'Vivacité acquise pendant',
+    why: "Une fois le défi réussi, la personne reste « vivante » ce temps-là sans devoir recommencer.",
+    step: 5,
+  },
+  min_iod_px: {
+    label: 'Taille minimale du visage',
+    why: "Écart entre les yeux, en pixels, sous lequel on ne tranche pas (on affiche « approchez-vous »). Mesuré : à 45 px, 5 % des attaques passent ; à 75 px, 0,2 %. C'est le réglage qui améliore sécurité ET confort en même temps.",
+    step: 5,
+  },
+  smooth: {
+    label: 'Lissage du défi',
+    why: "Nombre de relevés dans la médiane glissante. Plus haut : moins sensible au bruit, mais la médiane suit moins bien un mouvement rapide.",
+    step: 1,
+  },
+  sustain: {
+    label: 'Relevés à maintenir',
+    why: "Combien de relevés consécutifs la rotation doit tenir. Mesuré : à 3, les faux refus d'un vrai visage passent de 0,6 % à 6 % sans réduire les attaques. Laisser à 1.",
+    step: 1,
+  },
 };
 const CFG_DEFAULTS = { detect_confidence: 0.60, match_threshold: 0.363,
                        known_grace_seconds: 20, unknown_confirm: 3, check_every_n: 5 };
@@ -870,4 +905,57 @@ $('cfgReset').onclick = async () => {
 };
 
 setInterval(() => { if (!$('app').hidden) loadSettings(); }, 20000);
+
+/* =====================================================================
+ * VIVACITÉ
+ *
+ * La consigne du défi s'affiche aussi SUR l'image de la caméra, parce que
+ * la personne qui s'identifie regarde la caméra et pas cet écran. Ici c'est
+ * pour l'opérateur : il voit où en est le défi et peut le relancer.
+ * ===================================================================== */
+async function loadLiveness() {
+  const box = $('liveBox');
+  try {
+    const d = await vget('/liveness');
+    const on = !!d.settings.require_liveness;
+    $('liveTag').textContent = on ? 'exigée' : 'mesure seule';
+    $('liveTag').className = 'tag ' + (on ? 'ok' : '');
+    if (!d.tracks.length) {
+      box.innerHTML = '<p class="empty">Aucun visage suivi.</p>';
+      return;
+    }
+    box.innerHTML = d.tracks.map((t) => {
+      const c = t.challenge;
+      const etat = t.etat === 'vivant' ? '<b class="ok">vivante</b>'
+                 : t.etat === 'echec' ? '<b class="err">défi échoué</b>'
+                 : '<b>en attente</b>';
+      const loin = t.trop_loin
+        ? `<p class="why">Trop loin : ${t.inter_oculaire} px entre les yeux, il en faut ${d.settings.min_iod_px}. Approchez-vous.</p>`
+        : '';
+      const prog = c
+        ? `<p class="why">${esc(c.consigne)} — atteint ${c.atteint[0]} / ${c.atteint[1]}, il faut ±${c.requis}${c.restant ? ` (${c.restant} s)` : ''}</p>`
+        : '';
+      const raison = c && c.raison ? `<p class="why">${esc(c.raison)}</p>` : '';
+      return `<div class="setting">
+        <label>Visage suivi — ${etat}${t.tient_jusqua ? ` (encore ${t.tient_jusqua} s)` : ''}</label>
+        ${loin}${prog}${raison}
+        <p class="why">Netteté ${t.nettete ?? '—'} · moiré ${t.moire ?? '—'} <em>(indicatifs, non décisifs)</em></p>
+      </div>`;
+    }).join('');
+  } catch {
+    $('liveTag').textContent = 'hors ligne';
+    $('liveTag').className = 'tag lock';
+    box.innerHTML = '<p class="empty">Service vision injoignable.</p>';
+  }
+}
+
+$('liveRetry').addEventListener('click', async () => {
+  try {
+    await fetch(`${VAPI}/liveness/retry`, { method: 'POST' });
+    toast('Nouveau défi demandé');
+    loadLiveness();
+  } catch { toast('Service vision injoignable'); }
+});
+
+setInterval(() => { if (!$('app').hidden) loadLiveness(); }, 1000);
 loadSettings();

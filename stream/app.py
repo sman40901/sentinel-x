@@ -19,6 +19,7 @@ from urllib.parse import urlparse, parse_qs
 
 import paho.mqtt.client as mqtt
 
+import liveness as liveness_mod
 import vision as vision_mod
 from store import FaceStore, EventStore
 from vision import Vision
@@ -232,7 +233,14 @@ def watch_faces():
         # pas "rien n'a change".
         if _mqtt is not None:
             try:
-                _mqtt.publish(T_VISION, json.dumps({"face": face, "name": name}), qos=0)
+                msg = {"face": face, "name": name}
+                # La consigne du defi voyage avec l'etat : le dashboard
+                # l'affiche, et le boitier sait qu'une personne est en train
+                # de s'identifier plutot que de rester plantee la.
+                prompt = vision.current_prompt()
+                if prompt:
+                    msg["prompt"] = prompt
+                _mqtt.publish(T_VISION, json.dumps(msg), qos=0)
             except Exception:
                 pass
         if face != last_sent:
@@ -294,10 +302,18 @@ class Handler(BaseHTTPRequestHandler):
             st["lock_reason"] = why
             st["grace_active"] = time.time() < _grace["until"]
             st["grace_name"] = _grace["name"]
+            st["liveness_prompt"] = vision.current_prompt()
             return self._json(st)
         if p == "/api/config":
-            return self._json({"settings": dict(vision_mod.SETTINGS),
-                               "limits": {k: list(v) for k, v in vision_mod.LIMITS.items()}})
+            # Les deux familles de reglages dans une seule reponse : le
+            # dashboard n'a qu'un panneau a remplir.
+            settings = dict(vision_mod.SETTINGS)
+            settings.update(liveness_mod.SETTINGS)
+            limits = {k: list(v) for k, v in vision_mod.LIMITS.items()}
+            limits.update({k: list(v) for k, v in liveness_mod.LIMITS.items()})
+            return self._json({"settings": settings, "limits": limits})
+        if p == "/api/liveness":
+            return self._json(vision.liveness_state())
         if p == "/api/faces":
             return self._json({"people": faces.list()})
         if p == "/api/faces/thumb":
@@ -322,18 +338,31 @@ class Handler(BaseHTTPRequestHandler):
             self._err(403, why)
         return ok
 
+    # Ecritures qui ne peuvent RIEN accorder : elles ne font que retirer un
+    # droit deja acquis. Les soumettre a la maintenance rendrait le bouton
+    # inutilisable precisement quand on en a besoin - quelqu'un bloque devant
+    # la camera, boitier pas en maintenance - sans rien proteger, puisque le
+    # pire qu'un attaquant en tire est d'obliger les gens a refaire le defi.
+    # Elles restent derriere l'authentification HTTP de nginx.
+    SAFE_POSTS = ("/api/liveness/retry",)
+
     def do_POST(self):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
-        if not self._guard():
+        if u.path not in self.SAFE_POSTS and not self._guard():
             return
         if u.path == "/api/config":
             applied, errors = vision.apply_settings(q)
             if errors and not applied:
                 return self._err(400, "; ".join(f"{k}: {v}" for k, v in errors.items()))
             print(f"[config] {applied}", flush=True)
+            settings = dict(vision_mod.SETTINGS)
+            settings.update(liveness_mod.SETTINGS)
             return self._json({"ok": True, "applied": applied, "errors": errors,
-                               "settings": dict(vision_mod.SETTINGS)})
+                               "settings": settings})
+        if u.path == "/api/liveness/retry":
+            vision.reset_liveness()
+            return self._json({"ok": True})
         if u.path == "/api/faces":
             name = (q.get("name") or "").strip()[:40]
             if not name:

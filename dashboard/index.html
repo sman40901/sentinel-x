@@ -74,6 +74,18 @@
         <div class="cam-off" id="camOff">Flux indisponible<br><small>script IA non lancé (port 8080)</small></div>
       </div>
     </article>
+    <article class="panel">
+      <header>
+        <h2>Preuve de vivacité</h2>
+        <span class="tag" id="liveTag">—</span>
+      </header>
+      <p class="hint">Un visage reconnu ne vaut autorisation qu'après avoir tourné
+        la tête : une photo imprimée de la bonne personne est refusée. La consigne
+        s'affiche sur l'image de la caméra. Une vidéo rejouée sur écran, en
+        revanche, peut satisfaire le défi — voir docs/AUDIT-SECURITE.md.</p>
+      <div id="liveBox"></div>
+      <div class="row"><button class="btn" id="liveRetry">Relancer le défi</button></div>
+    </article>
     <article class="panel span2">
       <header><h2>Gaz (MQ-2)</h2><span class="legend"><i class="c3"></i>valeur brute</span></header>
       <canvas id="chartGaz"></canvas>
