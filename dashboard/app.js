@@ -712,8 +712,19 @@ $('faceForm').addEventListener('submit', async (e) => {
   try {
     const r = await fetch(`${VAPI}/faces?name=${encodeURIComponent(name)}`, { method: 'POST' });
     const j = await r.json();
-    if (!r.ok || j.ok === false) { toast(j.err || `Échec (HTTP ${r.status})`); }
-    else { toast(`${name} enregistré`); $('faceName').value = ''; loadPeople(); }
+    if (!r.ok || j.ok === false) {
+      const err = j.err || `Échec (HTTP ${r.status})`;
+      toast(err);
+      // Dit tout haut POURQUOI : sans ça, on clique sans comprendre ce qui
+      // manque, et le refus le plus fréquent demande justement une action
+      // devant la caméra.
+      speak(`Enregistrement refusé. ${err}`, { force: true });
+    } else {
+      toast(`${name} enregistré`);
+      speak(`${name} enregistré`, { force: true });
+      $('faceName').value = '';
+      loadPeople();
+    }
   } catch (err) {
     toast('Service vision injoignable');
   } finally {
@@ -907,12 +918,53 @@ $('cfgReset').onclick = async () => {
 setInterval(() => { if (!$('app').hidden) loadSettings(); }, 20000);
 
 /* =====================================================================
+ * PAROLE
+ *
+ * Indispensable, pas un gadget : la personne devant la caméra ne voit pas
+ * cet écran. Sans retour audible, elle n'a aucun moyen de savoir qu'on lui
+ * demande de tourner la tête, ni si ça a marché.
+ *
+ * La synthèse du navigateur plutôt qu'un service côté serveur : le dashboard
+ * tourne sur la machine qui héberge tout, donc ça sort par les mêmes
+ * haut-parleurs, sans redirection audio vers un conteneur ni paquet à
+ * installer. Et si la voix française manque, le navigateur prend sa voix par
+ * défaut au lieu de rester muet.
+ * ===================================================================== */
+
+const VOIX = {
+  on: localStorage.getItem('sx-voix') !== '0',
+  dernier: '',
+  quand: 0,
+};
+
+function speak(texte, { force = false } = {}) {
+  if (!VOIX.on || !texte || !window.speechSynthesis) return;
+  const now = Date.now();
+  // Ne pas répéter la même consigne en boucle : le panneau est interrogé
+  // chaque seconde, et une phrase relancée sans arrêt est inutilisable.
+  if (!force && texte === VOIX.dernier && now - VOIX.quand < 8000) return;
+  VOIX.dernier = texte;
+  VOIX.quand = now;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(texte);
+    const fr = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith('fr'));
+    if (fr) u.voice = fr;
+    u.lang = 'fr-FR';
+    u.rate = 1.0;
+    window.speechSynthesis.speak(u);
+  } catch { /* pas de synthèse : on continue en silence */ }
+}
+
+/* =====================================================================
  * VIVACITÉ
  *
  * La consigne du défi s'affiche aussi SUR l'image de la caméra, parce que
  * la personne qui s'identifie regarde la caméra et pas cet écran. Ici c'est
  * pour l'opérateur : il voit où en est le défi et peut le relancer.
  * ===================================================================== */
+let dernierEtatVoix = '';
+
 async function loadLiveness() {
   const box = $('liveBox');
   try {
@@ -922,7 +974,21 @@ async function loadLiveness() {
     $('liveTag').className = 'tag ' + (on ? 'ok' : '');
     if (!d.tracks.length) {
       box.innerHTML = '<p class="empty">Aucun visage suivi.</p>';
+      dernierEtatVoix = '';
       return;
+    }
+
+    // Annonce vocale : d'abord les transitions, puis la consigne en cours.
+    const t0 = d.tracks[0];
+    const etat = t0.etat + (t0.trop_loin ? '-loin' : '');
+    if (etat !== dernierEtatVoix) {
+      dernierEtatVoix = etat;
+      if (t0.etat === 'vivant') speak('Vivacité confirmée', { force: true });
+      else if (t0.etat === 'echec') speak('Échec. On recommence.', { force: true });
+    }
+    if (t0.etat !== 'vivant') {
+      if (t0.trop_loin) speak('Approchez-vous de la caméra');
+      else if (t0.challenge) speak(t0.challenge.consigne);
     }
     box.innerHTML = d.tracks.map((t) => {
       const c = t.challenge;
@@ -948,6 +1014,15 @@ async function loadLiveness() {
     box.innerHTML = '<p class="empty">Service vision injoignable.</p>';
   }
 }
+
+$('voixToggle').addEventListener('click', () => {
+  VOIX.on = !VOIX.on;
+  localStorage.setItem('sx-voix', VOIX.on ? '1' : '0');
+  $('voixToggle').textContent = VOIX.on ? 'Voix : activée' : 'Voix : coupée';
+  if (VOIX.on) speak('Voix activée', { force: true });
+  else window.speechSynthesis && window.speechSynthesis.cancel();
+});
+$('voixToggle').textContent = VOIX.on ? 'Voix : activée' : 'Voix : coupée';
 
 $('liveRetry').addEventListener('click', async () => {
   try {

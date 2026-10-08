@@ -100,19 +100,20 @@ SETTINGS = {
     "require_liveness": int(os.getenv("REQUIRE_LIVENESS", "1")),
     # Asymetrie SOUTENUE a atteindre de chaque cote, sur la mediane glissante.
     #
-    # 0.30, releve depuis 0.25 quand la fenetre d'identification du boitier est
-    # passee de 5 a 10 s. Ce n'est pas un reglage de confort : une fenetre deux
-    # fois plus longue donne deux fois plus de tirages a un attaquant qui agite
-    # une photo, et il faut relever la barre pour compenser. Mesure a 75 px,
-    # fenetre de 10 s, 800 tirages :
+    # 0.60, recalibre sur CETTE camera apres une erreur de ma part : les
+    # premieres valeurs venaient d'un modele a focale 600 px, qui n'est pas
+    # celle de cette webcam - bien plus grand angle. Mesure sur les captures
+    # reelles et sur des photos warpees par de vraies homographies de plan :
     #
-    #   seuil 0.25 : 9.0 % d'attaques acceptees, 99.9 % des vrais visages a 30 deg
-    #   seuil 0.30 : 0.5 %                       96.2 %
-    #   seuil 0.35 : 0.1 %                       71.6 %
+    #   vrai visage tourne, 45-51 px : 0.66 a 1.90  (14 releves)
+    #   photo tenue face camera (<=20 deg) : au pire 0.44
+    #   photo inclinee jusqu'a 30 deg      : au pire 0.55
+    #   photo contorsionnee jusqu'a 90 deg : au pire 0.92
     #
-    # 0.30 est le compromis : la rotation doit etre FRANCHE (un vrai visage a
-    # 40 deg passe a 100 %), mais une photo ne passe plus.
-    "turn_required": float(os.getenv("LIVE_TURN", "0.30")),
+    # 0.60 passe donc au-dessus d'une photo tenue normalement et sous le signal
+    # d'un vrai visage. Il ne passe PAS au-dessus d'une photo deliberement
+    # gauchie a l'extreme : voir "ce que ca n'arrete pas".
+    "turn_required": float(os.getenv("LIVE_TURN", "0.60")),
     # Duree d'UN essai de defi - a ne pas confondre avec la fenetre
     # d'identification du boitier, qui est plus longue (10 s).
     #
@@ -138,18 +139,18 @@ SETTINGS = {
     "hold_seconds": float(os.getenv("LIVE_HOLD_SECONDS", "90")),
     # Distance inter-oculaire minimale pour que le defi soit juge.
     #
-    # C'est LE reglage qui ameliore les deux taux a la fois : le bruit de
-    # l'asymetrie vaut ~2*bruit_px/inter_oculaire, donc un visage plus gros est
-    # moins bruite. Mesure, 600 essais par taille, bruit 2.5 px :
+    # 45 px. La valeur precedente, 75, etait PHYSIQUEMENT INATTEIGNABLE sur
+    # cette camera : sur 104 visages reellement captures, le maximum observe
+    # est 70 px et la mediane 28, meme collé a l'objectif. Elle venait d'un
+    # modele a focale 600 px alors que cette webcam est beaucoup plus grand
+    # angle. Resultat concret : le systeme affichait "approchez-vous" en
+    # boucle et ne jugeait jamais rien.
     #
-    #   45 px (0.84 m) : 5.0 % d'attaques acceptees  -  inacceptable
-    #   60 px (0.63 m) : 0.5 %
-    #   75 px (0.50 m) : 0.2 %, et 100 % des vrais visages a 30 deg
-    #  110 px (0.34 m) : 0.0 %
-    #
-    # 75 px, soit environ 50 cm de la camera. Plus loin, on ne tranche pas :
-    # on affiche "approchez-vous" plutot que de deviner.
-    "min_iod_px": float(os.getenv("LIVE_MIN_IOD", "75")),
+    # 45 px est atteint par un visage a portee de bras, et c'est la taille a
+    # laquelle les 14 releves de vrai visage tourne ont donne 0.66 a 1.90.
+    # En dessous, les points de YuNet se degradent et une photo gauchie peut
+    # produire n'importe quoi (2.2 a 20 px) : la garde reste indispensable.
+    "min_iod_px": float(os.getenv("LIVE_MIN_IOD", "45")),
     # Lissage : mediane sur N releves avant de retenir un extreme, pour qu'un
     # seul point aberrant ne valide pas un defi.
     # Taille de la mediane glissante. 5 releves a ~5 Hz = 1 s par cote.

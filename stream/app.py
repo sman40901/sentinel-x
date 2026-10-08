@@ -368,6 +368,12 @@ class Handler(BaseHTTPRequestHandler):
             if not name:
                 return self._err(400, "nom manquant")
             pid, err = vision.enrol(name)
+            # Journaliser le refus : sans ca, un enrolement qui echoue ne
+            # laisse aucune trace cote serveur, et on ne peut pas savoir
+            # apres coup ce qui a manque. Constate - une tentative s'est
+            # soldee par zero personne enrolee et aucun indice.
+            print(f"[enrolement] {name!r} : "
+                  + (f"ok ({pid[:8]})" if pid else f"REFUSE - {err}"), flush=True)
             if err:
                 return self._err(409, err)
             publish_alert({"type": "maintenance", "niveau": "info",

@@ -258,3 +258,79 @@ Deux consequences, toutes deux appliquees :
 Le resultat net : 0.5 % d'attaques acceptees au lieu de 0.0 %, et la rotation
 doit etre FRANCHE - un vrai visage a 40 deg passe a 100 %, a 30 deg a 96 %, a
 25 deg seulement a 59 %. C'est le prix explicite des 10 secondes.
+
+### CORRECTION : les premiers reglages etaient faux
+
+Tout ce qui precede dans cette section a ete calibre sur un modele geometrique
+a focale 600 px. **Cette webcam n'a pas cette focale** - elle est beaucoup plus
+grand angle. Deux consequences, decouvertes seulement en confrontant le systeme
+a la vraie camera :
+
+**1. Le minimum de taille etait physiquement inatteignable.** Sur 104 visages
+reellement captures, le maximum observe est **70 px** entre les yeux et la
+mediane **28 px**, meme colle a l'objectif. Le minimum exige etait 75 px : le
+systeme affichait donc « approchez-vous » en boucle et ne jugeait jamais rien.
+Corrige a **45 px**, atteint par 19 % des captures et par un visage a portee de
+bras.
+
+**2. Le bruit etait surestime, le signal sous-estime.** Mesure directe de
+l'asymetrie sur cette camera :
+
+| grandeur | valeur modelisee | valeur MESUREE |
+|---|---|---|
+| bruit de l'asymetrie | 0.117 | **0.0089** (mediane de 5 : 0.005) |
+| signal d'un vrai visage tourne | ~0.40 | **0.66 a 1.90** |
+
+Le bruit est ~13 fois plus faible que modelise, parce que l'asymetrie est une
+grandeur differentielle : elle annule le tremblement commun aux cinq points,
+alors que la mesure de bruit initiale (1.86-3.06 px) portait sur la dispersion
+par point. Toutes les simulations de taux de faux acceptes etaient donc
+pessimistes, et les seuils tires de ces simulations (0.25 puis 0.30) etaient
+trop bas pour le vrai signal.
+
+**Seuil corrige : 0.60**, place entre ce qu'une photo produit et ce qu'un vrai
+visage produit, mesure sur de vraies images warpees par de vraies homographies
+de plan :
+
+| ce qui est devant la camera | asymetrie maximale, visage >= 45 px |
+|---|---|
+| photo tenue vers l'objectif (<= 20 deg) | 0.44 |
+| photo inclinee jusqu'a 30 deg | 0.55 |
+| **seuil** | **0.60** |
+| vrai visage tourne (14 releves) | 0.66 a 1.90 |
+| photo deliberement gauchie jusqu'a 90 deg | 0.92 |
+
+### Ce que le defi arrete vraiment, apres correction
+
+Il arrete **une photo tendue vers la camera et bougee normalement** : elle
+plafonne a 0.44, le seuil est a 0.60.
+
+Il **n'arrete pas** une photo qu'un attaquant gauchit deliberement a des angles
+extremes (lacet, inclinaison et roulis combines au-dela de 45 deg), qui atteint
+0.92. Cette fuite n'est pas geometrique - l'asymetrie reste strictement
+invariante au roulis, verifie de 0 a 60 deg - mais vient de YuNet qui place mal
+ses points sur une image tres deformee. La contrainte d'atteindre les deux cotes
+dans la meme fenetre double la difficulte sans la fermer.
+
+Il n'arrete pas non plus une **video rejouee sur un ecran**.
+
+Ordre de grandeur honnete, donc : cela eleve la barre d'un geste opportuniste a
+une attaque preparee. Ce n'est pas un controle biometrique d'etat.
+
+### Guidage vocal
+
+La personne devant la camera ne voit pas le dashboard. Sans retour audible,
+elle n'a aucun moyen de savoir qu'on lui demande de tourner la tete, ni si ca a
+marche - constate en usage, le systeme reclamait « approchez-vous » sans que
+personne ne puisse l'entendre.
+
+Le dashboard parle donc : consigne du defi, « approchez-vous », « vivacite
+confirmee », « echec, on recommence », et le motif exact d'un refus
+d'enrolement. Synthese du navigateur plutot qu'un service cote serveur : le
+dashboard tourne sur la machine qui heberge tout, donc le son sort par les memes
+haut-parleurs, sans redirection audio vers un conteneur ni paquet a installer.
+Un bouton coupe la voix, et le choix est retenu.
+
+Les refus d'enrolement sont desormais aussi journalises cote serveur. Ils ne
+l'etaient pas : une tentative s'est soldee par zero personne enrolee et aucune
+trace permettant de savoir ce qui avait manque.
