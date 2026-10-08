@@ -239,7 +239,12 @@ class Vision:
             known = recognised and (live or not require)
 
             prompt = ""
-            if track is not None and recognised and not live and require:
+            # La consigne s'affiche AUSSI pour un visage inconnu, pas seulement
+            # pour une personne deja enregistree : le premier enrolement se
+            # fait forcement avec un visage inconnu, et il exige lui aussi la
+            # vivacite. Sans ca, la toute premiere personne n'avait aucune
+            # indication a l'ecran de ce qu'on attendait d'elle.
+            if track is not None and not live and require:
                 if track.too_far:
                     prompt = "Approchez-vous de la camera"
                 elif track.challenge is not None:
